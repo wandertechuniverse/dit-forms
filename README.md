@@ -135,4 +135,4 @@ All secrets are managed via platform dashboards. **Never commit `.env` files.**
 3. Run E2E tests locally before pushing
 4. Submit PR -> CI runs automatically -> Merge to `master` triggers deploy
 
-For questions, contact admin@dit.edu or open an Issue.
+For questions, contact info@joyadevu.link or open an Issue.
