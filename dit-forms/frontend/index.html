@@ -1,8 +1,18 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>DIT Forms</title></head>
+<head>
+  <meta charset="UTF-8">
+  <title>DIT Forms</title>
+  <!-- Sentry error tracking (production only) -->
+  <script src="https://browser.sentry-sdk.com/7.119.0/bundle.min.js" crossorigin="anonymous"></script>
+</head>
 <body>
   <script>
+    // Initialize Sentry in production
+    if (window.location.hostname !== 'localhost' && typeof Sentry !== 'undefined') {
+      Sentry.init({ dsn: '' }); // Add frontend DSN when ready
+    }
+    // Redirect based on auth
     const token = localStorage.getItem("dit_token");
     window.location.href = token ? "/admin/dashboard.html" : "/login.html";
   </script>
