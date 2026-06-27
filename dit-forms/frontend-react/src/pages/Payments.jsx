@@ -17,15 +17,28 @@ export default function Payments() {
   const [totalAmount, setTotalAmount] = useState(0);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
+  const [groups, setGroups] = useState([]);
+  const [groupFilter, setGroupFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const loadPayments = useCallback(async (q = '', method = '') => {
+  const loadGroups = useCallback(async () => {
+    if (!scope.programClassId || !scope.termId) return;
+    try {
+      const res = await api.get(`/students/all-groups?programClassId=${scope.programClassId}&termId=${scope.termId}`);
+      setGroups(res || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [scope.programClassId, scope.termId]);
+
+  const loadPayments = useCallback(async (q = '', method = '', grp = '') => {
     if (!scope.programClassId || !scope.termId) return;
     setLoading(true);
     try {
       let url = `/payments?programClassId=${scope.programClassId}&termId=${scope.termId}`;
       if (q) url += `&q=${encodeURIComponent(q)}`;
       if (method) url += `&paymentMethod=${method}`;
+      if (grp) url += `&group=${encodeURIComponent(grp)}`;
       const res = await api.get(url);
       setPayments(res.payments || []);
       setTotal(res.total || 0);
@@ -38,13 +51,18 @@ export default function Payments() {
     }
   }, [scope.programClassId, scope.termId]);
 
-  useEffect(() => { loadPayments(); }, [loadPayments]);
+  useEffect(() => { loadPayments(); loadGroups(); }, [loadPayments, loadGroups]);
 
-  const handleSearch = useCallback(debounce((q) => loadPayments(q, methodFilter)), [loadPayments, methodFilter]);
+  const handleSearch = useCallback(debounce((q) => loadPayments(q, methodFilter, groupFilter)), [loadPayments, methodFilter, groupFilter]);
 
   const handleMethodFilter = (method) => {
     setMethodFilter(method);
-    loadPayments(search, method);
+    loadPayments(search, method, groupFilter);
+  };
+
+  const handleGroupFilter = (grp) => {
+    setGroupFilter(grp);
+    loadPayments(search, methodFilter, grp);
   };
 
   return (
@@ -98,6 +116,21 @@ export default function Payments() {
                 </button>
               ))}
             </div>
+            {groups.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {groups.map((g) => (
+                  <button
+                    key={g.name}
+                    onClick={() => handleGroupFilter(groupFilter === g.name ? '' : g.name)}
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors shrink-0 ${
+                      groupFilter === g.name ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="text-sm text-gray-500 shrink-0">{total}</span>
           </div>
         </div>

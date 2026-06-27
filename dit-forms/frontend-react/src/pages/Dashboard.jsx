@@ -8,7 +8,7 @@ import { CardSkeleton } from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
 import {
   Users, FileText, Inbox, AlertCircle, TrendingUp,
-  ArrowUpRight, Settings, Loader2, Lock, PenLine, DollarSign,
+  ArrowUpRight, Settings, Loader2, Lock, PenLine, DollarSign, Tag,
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [scope, setScopeState] = useState(getScope);
   const [stats, setStats] = useState({ students: 0, forms: 0, submissions: 0, unpaid: 0 });
   const [recent, setRecent] = useState([]);
+  const [groupStats, setGroupStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(true);
   const [programClassId, setProgramClassId] = useState(lockedScope?.programClassId || scope.programClassId);
@@ -34,11 +35,12 @@ export default function Dashboard() {
     setLoading(true);
     setStatsLoading(true);
     try {
-      const [students, forms, submissions, orders] = await Promise.all([
+      const [students, forms, submissions, orders, grpStats] = await Promise.all([
         api.get(`/students?programClassId=${programClassId}&termId=${termId}`),
         api.get(`/forms?programClassId=${programClassId}&termId=${termId}`),
         api.get(`/submissions?programClassId=${programClassId}&termId=${termId}`),
         api.get(`/handout-orders?programClassId=${programClassId}&termId=${termId}&invoiceStatus=unpaid`),
+        api.get(`/groups/stats?programClassId=${programClassId}&termId=${termId}`),
       ]);
       setStats({
         students: students.total || 0,
@@ -47,6 +49,7 @@ export default function Dashboard() {
         unpaid: orders.total || 0,
       });
       setRecent((submissions.submissions || []).slice(0, 5));
+      setGroupStats(grpStats);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load dashboard data');
@@ -244,6 +247,72 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {groupStats && groupStats.groups.length > 0 && (
+        <div className="mx-4 md:mx-8 mb-6 md:mb-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-gray-400" />
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Group Overview</h2>
+            </div>
+            <a href="/groups" className="text-xs md:text-sm text-indigo-600 hover:text-indigo-500 font-medium flex items-center gap-1">
+              Manage <ArrowUpRight className="w-3 h-3 md:w-4 md:h-4" />
+            </a>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {groupStats.groups.map((g) => {
+              const submissionRate = g.studentCount > 0
+                ? Math.round((g.submissionCount / g.studentCount) * 100)
+                : 0;
+              return (
+                <div key={g.name} className="p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                    <span className="text-sm font-semibold text-gray-900 truncate">{g.name}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-gray-500">Students</p>
+                      <p className="font-bold text-gray-900">{g.studentCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Submitted</p>
+                      <p className="font-bold text-gray-900">{g.submissionCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Completion</p>
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${submissionRate}%`,
+                              backgroundColor: submissionRate === 100 ? '#10b981' : g.color,
+                            }}
+                          />
+                        </div>
+                        <span className="font-bold text-gray-900">{submissionRate}%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Unpaid</p>
+                      <p className={`font-bold ${g.unpaidCount > 0 ? 'text-rose-600' : 'text-gray-900'}`}>
+                        {g.unpaidCount}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {groupStats.totalRevenue > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-sm">
+              <span className="text-gray-500">Total Revenue</span>
+              <span className="font-bold text-emerald-600">GH₵ {groupStats.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
         </div>
       )}
 

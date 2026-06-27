@@ -1,10 +1,11 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from beanie import PydanticObjectId
 
 from app.models.payment import Payment
 from app.models.handout import HandoutOrder
+from app.models.student import Student
 from app.models.user import User
 from app.schemas.payment import (
     CreatePaymentRequest,
@@ -59,6 +60,7 @@ async def list_payments(
     handoutOrderId: Optional[str] = Query(None),
     studentId: Optional[str] = Query(None),
     method: Optional[str] = Query(None),
+    group: Optional[str] = Query(None),
     dateFrom: Optional[datetime] = Query(None),
     dateTo: Optional[datetime] = Query(None),
     current_user: User = Depends(require_scope),
@@ -69,6 +71,17 @@ async def list_payments(
     }
     if studentId:
         order_query["student.matchedStudentId"] = studentId
+
+    if group:
+        group_students = await Student.find(
+            Student.programClassId == programClassId,
+            Student.termId == termId,
+            Student.groups == group,
+        ).to_list()
+        student_ids = [str(s.id) for s in group_students]
+        if not student_ids:
+            return PaymentListResponse(payments=[], total=0, totalAmount=0.0)
+        order_query["student.matchedStudentId"] = {"$in": student_ids}
 
     orders = await HandoutOrder.find(order_query).to_list()
     order_ids = [str(o.id) for o in orders]

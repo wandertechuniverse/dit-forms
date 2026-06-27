@@ -8,7 +8,11 @@ from app.models.user import User
 from app.schemas.group import (
     CreateGroupRequest, UpdateGroupRequest,
     GroupResponse, GroupListResponse,
+    GroupStatItem, GroupStatsResponse,
 )
+from app.models.handout import HandoutOrder
+from app.models.payment import Payment
+from app.models.submission import FormSubmission
 from app.core.deps import require_role
 
 router = APIRouter(prefix="/groups", tags=["groups"])
@@ -45,6 +49,85 @@ async def list_groups(
     return GroupListResponse(
         groups=[await _group_with_count(g) for g in groups],
         total=len(groups),
+    )
+
+
+@router.get("/stats", response_model=GroupStatsResponse)
+async def get_group_stats(
+    programClassId: str = Query(...),
+    termId: str = Query(...),
+    current_user: User = Depends(require_role("admin", "class_rep")),
+):
+    groups = await StudentGroup.find(
+        StudentGroup.programClassId == programClassId,
+        StudentGroup.termId == termId,
+    ).sort("name").to_list()
+
+    all_students = await Student.find(
+        Student.programClassId == programClassId,
+        Student.termId == termId,
+    ).to_list()
+
+    all_submissions = await FormSubmission.find(
+        FormSubmission.programClassId == programClassId,
+        FormSubmission.termId == termId,
+    ).to_list()
+
+    all_orders = await HandoutOrder.find(
+        HandoutOrder.programClassId == programClassId,
+        HandoutOrder.termId == termId,
+    ).to_list()
+
+    all_payments = await Payment.find().to_list()
+    paid_order_ids = {p.handoutOrderId for p in all_payments}
+    payment_amounts = {}
+    for p in all_payments:
+        payment_amounts[p.handoutOrderId] = payment_amounts.get(p.handoutOrderId, 0) + p.amount
+
+    student_map = {str(s.id): s for s in all_students}
+    group_student_map = {}
+    for s in all_students:
+        for g_name in s.groups:
+            if g_name not in group_student_map:
+                group_student_map[g_name] = []
+            group_student_map[g_name].append(str(s.id))
+
+    total_students = len(all_students)
+    total_submissions = len(all_submissions)
+    total_revenue = sum(payment_amounts.values())
+
+    stat_groups = []
+    for g in groups:
+        sids = group_student_map.get(g.name, [])
+        submission_count = sum(
+            1 for sub in all_submissions
+            if sub.studentMatch and sub.studentMatch.matchedStudentId in sids
+        )
+        unpaid = sum(
+            1 for o in all_orders
+            if o.student and o.student.get("matchedStudentId") in sids
+            and o.invoice.invoiceStatus == "unpaid"
+        )
+        revenue = sum(
+            payment_amounts.get(str(o.id), 0)
+            for o in all_orders
+            if o.student and o.student.get("matchedStudentId") in sids
+        )
+
+        stat_groups.append(GroupStatItem(
+            name=g.name,
+            color=g.color,
+            studentCount=len(sids),
+            submissionCount=submission_count,
+            unpaidCount=unpaid,
+            totalRevenue=round(revenue, 2),
+        ))
+
+    return GroupStatsResponse(
+        groups=stat_groups,
+        totalStudents=total_students,
+        totalSubmissions=total_submissions,
+        totalRevenue=round(total_revenue, 2),
     )
 
 

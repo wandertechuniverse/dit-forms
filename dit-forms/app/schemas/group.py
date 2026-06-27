@@ -37,3 +37,19 @@ class GroupResponse(BaseModel):
 class GroupListResponse(BaseModel):
     groups: List[GroupResponse]
     total: int
+
+
+class GroupStatItem(BaseModel):
+    name: str
+    color: str
+    studentCount: int = 0
+    submissionCount: int = 0
+    unpaidCount: int = 0
+    totalRevenue: float = 0.0
+
+
+class GroupStatsResponse(BaseModel):
+    groups: List[GroupStatItem]
+    totalStudents: int = 0
+    totalSubmissions: int = 0
+    totalRevenue: float = 0.0
