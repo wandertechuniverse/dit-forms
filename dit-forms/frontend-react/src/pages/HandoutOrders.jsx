@@ -15,17 +15,30 @@ export default function HandoutOrders() {
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [groups, setGroups] = useState([]);
+  const [groupFilter, setGroupFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
 
-  const loadOrders = useCallback(async (q = '', status = '') => {
+  const loadGroups = useCallback(async () => {
+    if (!scope.programClassId || !scope.termId) return;
+    try {
+      const res = await api.get(`/students/all-groups?programClassId=${scope.programClassId}&termId=${scope.termId}`);
+      setGroups(res || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [scope.programClassId, scope.termId]);
+
+  const loadOrders = useCallback(async (q = '', status = '', grp = '') => {
     if (!scope.programClassId || !scope.termId) return;
     setLoading(true);
     try {
       let url = `/handout-orders?programClassId=${scope.programClassId}&termId=${scope.termId}`;
       if (q) url += `&q=${encodeURIComponent(q)}`;
       if (status) url += `&invoiceStatus=${status}`;
+      if (grp) url += `&group=${encodeURIComponent(grp)}`;
       const res = await api.get(url);
       setOrders(res.orders || []);
       setTotal(res.total || 0);
@@ -36,13 +49,18 @@ export default function HandoutOrders() {
     }
   }, [scope.programClassId, scope.termId]);
 
-  useEffect(() => { loadOrders(); }, [loadOrders]);
+  useEffect(() => { loadOrders(); loadGroups(); }, [loadOrders, loadGroups]);
 
-  const handleSearch = useCallback(debounce((q) => loadOrders(q, statusFilter)), [loadOrders, statusFilter]);
+  const handleSearch = useCallback(debounce((q) => loadOrders(q, statusFilter, groupFilter)), [loadOrders, statusFilter, groupFilter]);
 
   const handleStatusFilter = (status) => {
     setStatusFilter(status);
-    loadOrders(search, status);
+    loadOrders(search, status, groupFilter);
+  };
+
+  const handleGroupFilter = (grp) => {
+    setGroupFilter(grp);
+    loadOrders(search, statusFilter, grp);
   };
 
   const markPaid = async (orderId) => {
@@ -138,6 +156,21 @@ export default function HandoutOrders() {
                 </button>
               ))}
             </div>
+            {groups.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {groups.map((g) => (
+                  <button
+                    key={g.name}
+                    onClick={() => handleGroupFilter(groupFilter === g.name ? '' : g.name)}
+                    className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors shrink-0 ${
+                      groupFilter === g.name ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {g.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <span className="text-sm text-gray-500 shrink-0">{total}</span>
           </div>
         </div>

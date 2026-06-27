@@ -12,6 +12,7 @@ import Submissions from './pages/Submissions';
 import SubmissionDetail from './pages/SubmissionDetail';
 import HandoutOrders from './pages/HandoutOrders';
 import Payments from './pages/Payments';
+import Groups from './pages/Groups';
 import PublicForm from './pages/PublicForm';
 import NotFound from './pages/NotFound';
 
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/submissions/:id" element={<SubmissionDetail />} />
             <Route path="/handouts" element={<HandoutOrders />} />
             <Route path="/payments" element={<Payments />} />
+            <Route path="/groups" element={<Groups />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

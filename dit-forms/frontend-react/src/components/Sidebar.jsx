@@ -2,12 +2,13 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import {
   LayoutDashboard, Users, FileText, Inbox, Receipt, CreditCard,
-  LogOut, GraduationCap, ChevronLeft,
+  LogOut, GraduationCap, ChevronLeft, Tag,
 } from 'lucide-react';
 
 const links = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/students', label: 'Students', icon: Users },
+  { to: '/groups', label: 'Groups', icon: Tag },
   { to: '/forms', label: 'Forms', icon: FileText },
   { to: '/submissions', label: 'Submissions', icon: Inbox },
   { to: '/handouts', label: 'Handout Orders', icon: Receipt },

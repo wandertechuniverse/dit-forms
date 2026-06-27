@@ -8,7 +8,7 @@ import time
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import auth, forms, submissions, files, handouts, payments, students, users, export
+from app.routers import auth, forms, submissions, files, handouts, payments, students, users, export, groups
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,6 +64,7 @@ app.include_router(payments.router)
 app.include_router(students.router)
 app.include_router(users.router)
 app.include_router(export.router)
+app.include_router(groups.router)
 
 
 @app.get("/health")

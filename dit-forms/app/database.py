@@ -6,6 +6,7 @@ from app.models import (
     User, Student, FormDefinition, FormVersion,
     FormSubmission, SubmissionFile, HandoutOrder, Payment,
 )
+from app.models.group import StudentGroup
 
 
 async def init_db() -> None:
@@ -18,6 +19,7 @@ async def init_db() -> None:
         document_models=[
             User,
             Student,
+            StudentGroup,
             FormDefinition,
             FormVersion,
             FormSubmission,

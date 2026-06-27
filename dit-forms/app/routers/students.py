@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from beanie import PydanticObjectId
 
@@ -47,6 +47,7 @@ async def list_students(
     programClassId: str = Query(...),
     termId: str = Query(...),
     q: Optional[str] = Query(None, description="Search by name or ID number"),
+    group: Optional[str] = Query(None, description="Filter by group name"),
     current_user: User = Depends(require_scope),
 ):
     query: dict = {
@@ -60,6 +61,9 @@ async def list_students(
             {"idNumber": {"$regex": q, "$options": "i"}},
         ]
 
+    if group:
+        query["groups"] = group
+
     students = await Student.find(query).to_list()
 
     return StudentListResponse(
@@ -70,6 +74,7 @@ async def list_students(
                 termId=s.termId,
                 fullName=s.fullName,
                 idNumber=s.idNumber,
+                groups=s.groups,
                 createdAt=s.createdAt,
                 updatedAt=s.updatedAt,
             )
@@ -77,6 +82,22 @@ async def list_students(
         ],
         total=len(students),
     )
+
+
+@router.get("/all-groups")
+async def list_all_groups(
+    programClassId: str = Query(...),
+    termId: str = Query(...),
+    current_user: User = Depends(require_scope),
+):
+    pipeline = [
+        {"$match": {"programClassId": programClassId, "termId": termId}},
+        {"$unwind": "$groups"},
+        {"$group": {"_id": "$groups", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]
+    results = await Student.aggregate(pipeline).to_list()
+    return [{"name": r["_id"], "count": r["count"]} for r in results]
 
 
 @router.post("", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)

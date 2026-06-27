@@ -13,6 +13,7 @@ from reportlab.pdfgen import canvas
 EUR = "\u20AC"
 
 from app.models.handout import HandoutOrder
+from app.models.student import Student
 from app.models.user import User
 from app.schemas.handout import HandoutOrderResponse, HandoutOrderListResponse
 from app.core.deps import require_role, require_scope
@@ -42,6 +43,7 @@ async def list_handout_orders(
     termId: str = Query(...),
     studentId: Optional[str] = Query(None),
     invoiceStatus: Optional[str] = Query(None, pattern="^(unpaid|paid|partially_paid)$"),
+    group: Optional[str] = Query(None),
     current_user: User = Depends(require_scope),
 ):
     query: dict = {
@@ -52,6 +54,17 @@ async def list_handout_orders(
         query["student.matchedStudentId"] = studentId
     if invoiceStatus:
         query["invoice.invoiceStatus"] = invoiceStatus
+
+    if group:
+        students = await Student.find(
+            Student.programClassId == programClassId,
+            Student.termId == termId,
+            Student.groups == group,
+        ).to_list()
+        student_ids = [str(s.id) for s in students]
+        if not student_ids:
+            return HandoutOrderListResponse(orders=[], total=0)
+        query["student.matchedStudentId"] = {"$in": student_ids}
 
     orders = await HandoutOrder.find(query).sort("-createdAt").to_list()
     return HandoutOrderListResponse(

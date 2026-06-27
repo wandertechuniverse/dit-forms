@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, List, Optional
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class StudentCreate(BaseModel):
@@ -8,6 +8,7 @@ class StudentCreate(BaseModel):
     termId: str
     fullName: str
     idNumber: str
+    groups: List[str] = Field(default_factory=list)
 
 
 class StudentUpdate(BaseModel):
@@ -15,6 +16,7 @@ class StudentUpdate(BaseModel):
     idNumber: Optional[str] = None
     programClassId: Optional[str] = None
     termId: Optional[str] = None
+    groups: Optional[List[str]] = None
 
 
 class StudentResponse(BaseModel):
@@ -25,6 +27,7 @@ class StudentResponse(BaseModel):
     termId: str
     fullName: str
     idNumber: str
+    groups: List[str] = Field(default_factory=list)
     createdAt: datetime
     updatedAt: datetime
 
