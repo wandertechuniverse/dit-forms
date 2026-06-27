@@ -4,6 +4,33 @@ import { validateFormSchema } from '../lib/validators';
 import toast from 'react-hot-toast';
 
 let autoSaveTimer = null;
+const DRAFT_STORAGE_KEY = 'dit-form-draft';
+
+function loadDraftFromStorage(formId) {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved.formDefinition?.id === formId) return saved;
+    return null;
+  } catch { return null; }
+}
+
+function saveDraftToStorage(state) {
+  try {
+    if (state.formDefinition && state.currentVersion) {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+        formDefinition: state.formDefinition,
+        currentVersion: state.currentVersion,
+        fields: state.fields,
+      }));
+    }
+  } catch {}
+}
+
+function clearDraftStorage() {
+  try { localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+}
 
 export const useFormBuilderStore = create((set, get) => ({
   formDefinition: null,
@@ -19,6 +46,18 @@ export const useFormBuilderStore = create((set, get) => ({
   _fieldCounter: 0,
 
   loadForm: async (formId) => {
+    const cached = loadDraftFromStorage(formId);
+    if (cached) {
+      set({
+        formDefinition: cached.formDefinition,
+        currentVersion: cached.currentVersion,
+        allVersions: [],
+        fields: cached.fields || [],
+        saveState: 'idle', publishState: 'idle', isDirty: false,
+        lastSavedAt: cached.currentVersion ? new Date(cached.currentVersion.updatedAt) : null,
+        errorMessage: null, validationErrors: null,
+      });
+    }
     try {
       const detail = await api.get(`/forms/${formId}`);
       const draftId = detail.draftVersionId;
@@ -26,7 +65,7 @@ export const useFormBuilderStore = create((set, get) => ({
       const versionToLoad =
         detail.versions.find(v => v.id === draftId) ||
         detail.versions.find(v => v.id === publishedId);
-      set({
+      const newState = {
         formDefinition: {
           id: detail.id, name: detail.name, programClassId: detail.programClassId,
           termId: detail.termId, purpose: detail.purpose, courseId: detail.courseId,
@@ -38,10 +77,14 @@ export const useFormBuilderStore = create((set, get) => ({
         saveState: 'idle', publishState: 'idle', isDirty: false,
         lastSavedAt: versionToLoad ? new Date(versionToLoad.updatedAt) : null,
         errorMessage: null, validationErrors: null,
-      });
+      };
+      set(newState);
+      saveDraftToStorage(newState);
     } catch (err) {
-      set({ errorMessage: err.message });
-      toast.error('Failed to load form');
+      if (!cached) {
+        set({ errorMessage: err.message });
+        toast.error('Failed to load form');
+      }
     }
   },
 
@@ -95,6 +138,7 @@ export const useFormBuilderStore = create((set, get) => ({
     try {
       const updated = await api.patch(`/forms/${formDefinition.id}/versions/${currentVersion.id}`, { schema: { fields } });
       set({ currentVersion: updated, saveState: 'saved', isDirty: false, lastSavedAt: new Date(), validationErrors: null });
+      saveDraftToStorage(get());
       setTimeout(() => { if (get().saveState === 'saved') set({ saveState: 'idle' }); }, 2000);
       return true;
     } catch (err) {
@@ -120,6 +164,7 @@ export const useFormBuilderStore = create((set, get) => ({
         if (!saved) { set({ publishState: 'error' }); return false; }
       }
       await api.post(`/forms/${formDefinition.id}/versions/${currentVersion.id}/publish`, {});
+      clearDraftStorage();
       set({ publishState: 'published', saveState: 'idle', isDirty: false, formDefinition: { ...formDefinition, status: 'published' } });
       toast.success('Form published!');
       await get().loadForm(formDefinition.id);
@@ -137,6 +182,7 @@ export const useFormBuilderStore = create((set, get) => ({
     if (currentVersion.status !== 'draft') { toast.error('Can only delete drafts'); return; }
     try {
       await api.delete(`/forms/${formDefinition.id}/versions/${currentVersion.id}`);
+      clearDraftStorage();
       toast.success('Draft deleted');
       await get().loadForm(formDefinition.id);
     } catch (err) {
@@ -160,6 +206,7 @@ export const useFormBuilderStore = create((set, get) => ({
 
   reset: () => {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    clearDraftStorage();
     set({
       formDefinition: null, currentVersion: null, allVersions: [], fields: [],
       saveState: 'idle', publishState: 'idle', isDirty: false,

@@ -1,5 +1,7 @@
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from beanie import PydanticObjectId
 
 from app.models.group import StudentGroup
@@ -10,10 +12,17 @@ from app.schemas.group import (
     GroupResponse, GroupListResponse,
     GroupStatItem, GroupStatsResponse,
 )
+from app.services.group_assignment_service import GroupAssignmentService
 from app.models.handout import HandoutOrder
 from app.models.payment import Payment
 from app.models.submission import FormSubmission
 from app.core.deps import require_role
+
+
+class RandomAssignRequest(BaseModel):
+    programClassId: str
+    termId: str
+    target_size: int = 25
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -187,6 +196,10 @@ async def delete_group(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
+    error = await GroupAssignmentService.validate_group_edit(group, "delete")
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+
     students = await Student.find(
         Student.programClassId == group.programClassId,
         Student.termId == group.termId,
@@ -197,6 +210,19 @@ async def delete_group(
         await student.save()
 
     await group.delete()
+
+
+@router.post("/assign-random")
+async def random_assign(
+    request: RandomAssignRequest,
+    current_user: User = Depends(require_role("admin")),
+):
+    result = await GroupAssignmentService.assign_students_randomly(
+        program_class_id=request.programClassId,
+        term_id=request.termId,
+        target_size=request.target_size,
+    )
+    return result
 
 
 @router.post("/{groupId}/students/{studentId}")

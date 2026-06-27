@@ -22,7 +22,7 @@ export default function ActionButtons() {
 
   const handlePreview = () => {
     if (!formDefinition?.id) return;
-    window.open(`/public/submit-form?formId=${formDefinition.id}`, '_blank');
+    window.open(`/form/${formDefinition.id}`, '_blank');
   };
 
   return (

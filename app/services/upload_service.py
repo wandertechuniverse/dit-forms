@@ -20,18 +20,19 @@ cloudinary.config(
 ALLOWED_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 ALLOWED_FORMATS = ["jpg", "jpeg", "png", "pdf"]
 MAX_SIZE = 5 * 1024 * 1024  # 5MB
+DIT_FOLDER = settings.CLOUDINARY_FOLDER
 
 
 async def upload_student_file(file_bytes: bytes, filename: str, student_id: str) -> dict:
     """Upload IC/document to Cloudinary with student-scoped folder."""
     name_part = filename.rsplit(".", 1)[0] if "." in filename else filename
-    public_id = f"dit-forms/students/{student_id}/{name_part}"
+    public_id = f"{DIT_FOLDER}/students/{student_id}/{name_part}"
 
     try:
         result = cloudinary.uploader.upload(
             file_bytes,
             public_id=public_id,
-            folder="dit-forms/students",
+            folder=f"{DIT_FOLDER}/students",
             resource_type="auto",
             overwrite=False,
             allowed_formats=ALLOWED_FORMATS,
@@ -40,6 +41,7 @@ async def upload_student_file(file_bytes: bytes, filename: str, student_id: str)
         return {
             "url": result["secure_url"],
             "public_id": result["public_id"],
+            "folder": DIT_FOLDER,
             "format": result["format"],
             "bytes": result["bytes"],
         }
@@ -49,13 +51,13 @@ async def upload_student_file(file_bytes: bytes, filename: str, student_id: str)
 
 async def upload_student_ic(file_bytes: bytes, filename: str, student_id: str) -> dict:
     """Upload IC with auto-crop and quality enforcement."""
-    public_id = f"dit-forms/students/{student_id}/ic"
+    public_id = f"{DIT_FOLDER}/students/{student_id}/ic"
 
     try:
         result = cloudinary.uploader.upload(
             file_bytes,
             public_id=public_id,
-            folder="dit-forms/students",
+            folder=f"{DIT_FOLDER}/students",
             resource_type="image",
             overwrite=True,
             allowed_formats=["jpg", "jpeg", "png"],
@@ -68,6 +70,7 @@ async def upload_student_ic(file_bytes: bytes, filename: str, student_id: str) -
         return {
             "url": result["secure_url"],
             "public_id": result["public_id"],
+            "folder": DIT_FOLDER,
             "format": result["format"],
             "bytes": result["bytes"],
         }

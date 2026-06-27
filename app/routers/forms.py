@@ -15,6 +15,7 @@ from app.schemas.form import (
     FormDetailResponse,
     PublicFormResponse,
 )
+from app.schemas.form_validation import validate_form_schema
 from app.core.deps import require_role, require_scope
 
 router = APIRouter(tags=["forms"])
@@ -129,6 +130,12 @@ async def create_form_version(
     request: CreateFormVersionRequest,
     current_user: User = Depends(require_role("admin")),
 ):
+    # SERVER-SIDE VALIDATION PARITY (matches frontend form-validator.js)
+    try:
+        validate_form_schema(request.schema.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     form_def = await FormDefinition.get(PydanticObjectId(formId))
     if not form_def:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -189,6 +196,12 @@ async def publish_version(
         raise HTTPException(status_code=404, detail="Version not found")
     if version.status != "draft":
         raise HTTPException(status_code=400, detail="Only drafts can be published")
+
+    # RE-VALIDATE BEFORE PUBLISHING (CRITICAL: server-side parity check)
+    try:
+        validate_form_schema(version.schema)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Cannot publish invalid schema: {str(e)}")
 
     await FormVersion.find(
         {"formDefinitionId": formId, "status": "published"}

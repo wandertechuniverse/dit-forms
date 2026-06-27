@@ -5,11 +5,9 @@ from app.models.student import Student
 from app.models.user import User
 from app.core.deps import require_role, require_scope
 from app.services import upload_service
+from app.schemas.upload import validate_upload_file, validate_student_id
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
-
-ALLOWED_TYPES = {"image/jpeg", "image/png", "application/pdf"}
-MAX_SIZE = 5 * 1024 * 1024  # 5MB
 
 
 @router.post("/students/{studentId}/upload-ic")
@@ -19,12 +17,11 @@ async def upload_student_ic(
     current_user: User = Depends(require_role("admin", "class_rep")),
 ):
     """Upload a student's IC card image with auto-optimization."""
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(400, "Only JPG, PNG, or PDF files are allowed")
+    # Parity validation: matches frontend form-validator.js messages exactly
+    validate_student_id(studentId)
 
     contents = await file.read()
-    if len(contents) > MAX_SIZE:
-        raise HTTPException(400, f"File too large. Max {MAX_SIZE // 1024 // 1024}MB")
+    validate_upload_file(file.content_type, len(contents))
 
     student = await Student.get(studentId)
     if not student:

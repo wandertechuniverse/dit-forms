@@ -53,6 +53,26 @@ export default function PublicForm() {
     }
   };
 
+  const uploadFile = async (submissionId, fieldId, file) => {
+    const presignRes = await api.post(`/submissions/${submissionId}/files/presign`, {
+      fieldKey: fieldId,
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+    });
+
+    const { uploadUrl } = presignRes;
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error(`Failed to upload ${file.name}`);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -76,7 +96,22 @@ export default function PublicForm() {
         idNumber: answers._studentId || '',
         answers: answerDict,
       };
-      await api.post(`/public/forms/${id}/submit`, payload);
+      const result = await api.post(`/public/forms/${id}/submit`, payload);
+
+      const fileFields = form.schema.fields.filter(
+        (f) => f.type === 'file' && files[f.id]?.length > 0 && isVisible(f)
+      );
+
+      for (const field of fileFields) {
+        for (const file of files[field.id]) {
+          try {
+            await uploadFile(result.submissionId, field.id, file);
+          } catch (uploadErr) {
+            console.error(`File upload failed for ${file.name}:`, uploadErr);
+          }
+        }
+      }
+
       play('success');
       setSubmitted(true);
     } catch (err) {
@@ -248,20 +283,42 @@ export default function PublicForm() {
                 )}
 
                 {field.type === 'file' && (
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-indigo-300 transition-colors">
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-indigo-300 transition-colors relative">
                     <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <input
                       type="file"
-                      multiple
+                      multiple={!field.maxFiles || field.maxFiles > 1}
+                      accept={field.accept || undefined}
                       onChange={(e) => handleFileChange(field.id, e.target.files)}
                       className="absolute inset-0 opacity-0 cursor-pointer"
-                      style={{ position: 'relative' }}
                     />
                     <p className="text-sm text-gray-500">Click or drag files to upload</p>
+                    {field.accept && (
+                      <p className="text-xs text-gray-400 mt-1">Accepted: {field.accept}</p>
+                    )}
+                    {field.maxFiles && (
+                      <p className="text-xs text-gray-400">Max files: {field.maxFiles}</p>
+                    )}
                     {files[field.id]?.length > 0 && (
-                      <p className="text-xs text-indigo-600 mt-2 font-medium">
-                        {files[field.id].length} file(s) selected
-                      </p>
+                      <div className="mt-3 space-y-1">
+                        {files[field.id].map((file, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-1.5">
+                            <span className="truncate max-w-[200px]">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFiles(prev => ({
+                                  ...prev,
+                                  [field.id]: prev[field.id].filter((_, i) => i !== idx)
+                                }));
+                              }}
+                              className="text-red-400 hover:text-red-600 ml-2"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
