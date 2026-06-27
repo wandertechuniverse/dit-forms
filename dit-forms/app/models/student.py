@@ -11,6 +11,8 @@ class Student(Document):
     fullName: str
     idNumber: str
     groups: List[str] = Field(default_factory=list)
+    icDocumentUrl: Optional[str] = None
+    icPublicId: Optional[str] = None
     createdAt: datetime = Field(default_factory=datetime.utcnow)
     updatedAt: datetime = Field(default_factory=datetime.utcnow)
 

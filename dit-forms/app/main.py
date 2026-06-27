@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -6,9 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import time
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
 from app.config import get_settings
 from app.database import init_db
 from app.routers import auth, forms, submissions, files, handouts, payments, students, users, export, groups
+from app.routers import uploads, admin
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,6 +22,23 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("dit_forms")
+
+settings = get_settings()
+
+# Initialize Sentry BEFORE creating FastAPI app
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            StarletteIntegration(transaction_style="endpoint"),
+        ],
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=settings.ENVIRONMENT,
+        release=settings.GIT_SHA,
+    )
+    logger.info("Sentry initialized")
 
 
 @asynccontextmanager
@@ -27,7 +50,6 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down DIT Forms API")
 
 
-settings = get_settings()
 app = FastAPI(title=settings.APP_NAME, version="0.1.0", lifespan=lifespan)
 
 origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()] if settings.CORS_ORIGINS else ["*"]
@@ -65,6 +87,8 @@ app.include_router(students.router)
 app.include_router(users.router)
 app.include_router(export.router)
 app.include_router(groups.router)
+app.include_router(uploads.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

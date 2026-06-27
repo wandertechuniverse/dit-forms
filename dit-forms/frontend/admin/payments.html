@@ -11,157 +11,66 @@
       <h1>DIT Forms</h1>
       <nav id="sidebar-nav"></nav>
     </aside>
-
     <main class="main-content">
       <div class="topbar">
         <h2>Payments</h2>
         <div class="user-info" id="user-info"></div>
       </div>
-
       <div id="alert-box"></div>
-
-      <!-- Record Payment -->
       <div class="card">
         <h3>Record Payment</h3>
         <form id="payment-form">
           <div class="form-row">
-            <div class="form-group">
-              <label>Handout Order ID</label>
-              <input type="text" id="pay-order-id" class="form-control" required>
-              <small class="text-muted">Paste the order ID from Handout Orders page</small>
-            </div>
-            <div class="form-group">
-              <label>Amount</label>
-              <input type="number" id="pay-amount" class="form-control" step="0.01" min="0.01" required>
-            </div>
+            <div class="form-group"><label>Handout Order ID</label><input type="text" id="pay-order-id" class="form-control" required><small class="text-muted">Paste the order ID from Handout Orders page</small></div>
+            <div class="form-group"><label>Amount</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0.01" required></div>
           </div>
           <div class="form-row">
-            <div class="form-group">
-              <label>Payment Method</label>
-              <select id="pay-method" class="form-control">
-                <option value="cash">Cash</option>
-                <option value="bank">Bank Transfer</option>
-                <option value="mobile">Mobile Money</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Reference (optional)</label>
-              <input type="text" id="pay-reference" class="form-control" placeholder="Receipt # or transaction ID">
-            </div>
+            <div class="form-group"><label>Payment Method</label><select id="pay-method" class="form-control"><option value="cash">Cash</option><option value="bank">Bank Transfer</option><option value="mobile">Mobile Money</option><option value="other">Other</option></select></div>
+            <div class="form-group"><label>Reference (optional)</label><input type="text" id="pay-reference" class="form-control" placeholder="Receipt # or transaction ID"></div>
           </div>
-          <div class="form-group">
-            <label>Paid At (optional, defaults to now)</label>
-            <input type="datetime-local" id="pay-date" class="form-control">
-          </div>
+          <div class="form-group"><label>Paid At (optional)</label><input type="datetime-local" id="pay-date" class="form-control"></div>
           <button type="submit" class="btn btn-success" id="pay-btn">Record Payment</button>
         </form>
       </div>
-
-      <!-- Payment History -->
       <div class="card">
         <h3>Payment History</h3>
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Order ID</th>
-                <th>Amount</th>
-                <th>Method</th>
-                <th>Reference</th>
-                <th>Received By</th>
-              </tr>
-            </thead>
-            <tbody id="payments-tbody">
-              <tr><td colspan="6" class="text-center">Loading...</td></tr>
-            </tbody>
+            <thead><tr><th>Date</th><th>Order ID</th><th>Amount</th><th>Method</th><th>Reference</th><th>Received By</th></tr></thead>
+            <tbody id="payments-tbody"><tr><td colspan="6" class="text-center">Loading...</td></tr></tbody>
           </table>
         </div>
       </div>
     </main>
   </div>
-
   <script src="/assets/js/api.js"></script>
   <script src="/assets/js/auth.js"></script>
   <script src="/assets/js/utils.js"></script>
   <script>
-    let currentScope = {};
-
-    (async () => {
-      const user = await auth.requireLogin();
-      if (!user) return;
-      auth.renderTopbar(user);
-      auth.renderSidebar("payments", user);
-
-      currentScope = getScope();
-      if (!currentScope.programClassId || !currentScope.termId) {
-        alert("Please select a scope on the Dashboard first.");
-        window.location.href = "/admin/dashboard.html";
-        return;
-      }
-
-      const params = new URLSearchParams(window.location.search);
-      const orderId = params.get("orderId");
-      if (orderId) {
-        document.getElementById("pay-order-id").value = orderId;
-      }
-
+    let currentScope={};
+    (async()=>{
+      const user=await auth.requireLogin();if(!user)return;
+      auth.renderTopbar(user);auth.renderSidebar("payments");
+      currentScope=getScope();
+      if(!currentScope.programClassId||!currentScope.termId){alert("Please select a scope on the Dashboard first.");window.location.href="/admin/dashboard.html";return;}
+      const params=new URLSearchParams(window.location.search);
+      const orderId=params.get("orderId");if(orderId)document.getElementById("pay-order-id").value=orderId;
       loadPayments();
     })();
-
-    document.getElementById("payment-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById("pay-btn");
-      utils.setLoading(btn, true);
-
-      const body = {
-        handoutOrderId: document.getElementById("pay-order-id").value.trim(),
-        amount: parseFloat(document.getElementById("pay-amount").value),
-        method: document.getElementById("pay-method").value,
-        reference: document.getElementById("pay-reference").value.trim() || null,
-      };
-      const dateVal = document.getElementById("pay-date").value;
-      if (dateVal) body.paidAt = new Date(dateVal).toISOString();
-
-      try {
-        await api.post("/payments", body);
-        utils.showAlert("alert-box", "Payment recorded successfully!", "success");
-        e.target.reset();
-        loadPayments();
-      } catch (err) {
-        utils.showAlert("alert-box", "Failed: " + err.message, "danger");
-      } finally {
-        utils.setLoading(btn, false);
-      }
+    document.getElementById("payment-form").addEventListener("submit",async(e)=>{
+      e.preventDefault();const btn=document.getElementById("pay-btn");utils.setLoading(btn,true);
+      const body={handoutOrderId:document.getElementById("pay-order-id").value.trim(),amount:parseFloat(document.getElementById("pay-amount").value),method:document.getElementById("pay-method").value,reference:document.getElementById("pay-reference").value.trim()||null};
+      const dv=document.getElementById("pay-date").value;if(dv)body.paidAt=new Date(dv).toISOString();
+      try{await api.post("/payments",body);utils.showAlert("alert-box","Payment recorded successfully!","success");e.target.reset();loadPayments();}catch(err){utils.showAlert("alert-box","Failed: "+err.message,"danger");}finally{utils.setLoading(btn,false);}
     });
-
-    async function loadPayments() {
-      const tbody = document.getElementById("payments-tbody");
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center">Loading...</td></tr>';
-
-      try {
-        const res = await api.get("/payments?programClassId=" + currentScope.programClassId + "&termId=" + currentScope.termId);
-        if (res.payments.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No payments yet</td></tr>';
-          return;
-        }
-        tbody.innerHTML = res.payments.map(p => {
-          const shortId = p.handoutOrderId.slice(-8);
-          const ref = p.reference ? utils.escapeHtml(p.reference) : '\u2014';
-          const received = p.receivedByUserId ? '\u2713' : '\u2014';
-          return '<tr>' +
-            '<td>' + utils.formatDate(p.paidAt) + '</td>' +
-            '<td><code>' + shortId + '</code></td>' +
-            '<td><strong>' + utils.formatMoney(p.amount) + '</strong></td>' +
-            '<td><span class="badge badge-info">' + p.method + '</span></td>' +
-            '<td>' + ref + '</td>' +
-            '<td>' + received + '</td>' +
-            '</tr>';
-        }).join("");
-      } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Error: ' + err.message + '</td></tr>';
-      }
+    async function loadPayments(){
+      const tbody=document.getElementById("payments-tbody");
+      tbody.innerHTML='<tr><td colspan="6" class="text-center">Loading...</td></tr>';
+      try{
+        const res=await api.get(`/payments?programClassId=${currentScope.programClassId}&termId=${currentScope.termId}`);
+        if(!res.payments.length){tbody.innerHTML='<tr><td colspan="6" class="text-center text-muted">No payments yet</td></tr>';return;}
+        tbody.innerHTML=res.payments.map(p=>`<tr><td>${utils.formatDate(p.paidAt)}</td><td><code>${p.handoutOrderId.slice(-8)}</code></td><td><strong>${utils.formatMoney(p.amount)}</strong></td><td><span class="badge badge-info">${p.method}</span></td><td>${utils.escapeHtml(p.reference||'—')}</td><td>${p.receivedByUserId?'Yes':'—'}</td></tr>`).join("");
+      }catch(e){tbody.innerHTML=`<tr><td colspan="6" class="text-center text-muted">Error: ${e.message}</td></tr>`;}
     }
   </script>
 </body>

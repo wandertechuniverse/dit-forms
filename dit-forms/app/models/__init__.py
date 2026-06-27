@@ -5,6 +5,7 @@ from app.models.submission import FormSubmission
 from app.models.file import SubmissionFile
 from app.models.handout import HandoutOrder
 from app.models.payment import Payment
+from app.models.alert_log import AlertLog
 
 __all__ = [
     "User",
@@ -15,4 +16,5 @@ __all__ = [
     "SubmissionFile",
     "HandoutOrder",
     "Payment",
+    "AlertLog",
 ]

@@ -14,58 +14,29 @@ const auth = {
       return null;
     }
   },
-
   logout() {
     api.clearToken();
     localStorage.removeItem("dit_programClassId");
     localStorage.removeItem("dit_termId");
     window.location.href = "/login.html";
   },
-
   renderTopbar(user) {
-    const topbar = document.getElementById("user-info");
-    if (topbar) {
-      topbar.innerHTML = `
-        <span>${user.email} (${user.role})</span>
-        <button class="btn btn-secondary btn-sm" onclick="auth.logout()">Logout</button>
-      `;
-    }
+    const el = document.getElementById("user-info");
+    if (el) el.innerHTML = `<span>${user.email} (${user.role})</span><button class="btn btn-secondary btn-sm" onclick="auth.logout()">Logout</button>`;
   },
-
-  renderSidebar(activePage, user) {
+  renderSidebar(activePage) {
     const sidebar = document.getElementById("sidebar-nav");
     if (!sidebar) return;
-
     const { programClassId, termId } = getScope();
-    const scopeQuery = programClassId && termId
-      ? `?programClassId=${programClassId}&termId=${termId}`
-      : "";
-
+    const q = programClassId && termId ? `?programClassId=${programClassId}&termId=${termId}` : "";
     const links = [
       { href: "/admin/dashboard.html", label: "Dashboard", key: "dashboard" },
-      { href: `/admin/students.html${scopeQuery}`, label: "Students", key: "students" },
-      { href: `/admin/forms.html${scopeQuery}`, label: "Forms", key: "forms" },
-      { href: `/admin/submissions.html${scopeQuery}`, label: "Submissions", key: "submissions" },
-      { href: `/admin/handout-orders.html${scopeQuery}`, label: "Handout Orders", key: "handouts" },
-      { href: `/admin/payments.html${scopeQuery}`, label: "Payments", key: "payments" },
+      { href: `/admin/students.html${q}`, label: "Students", key: "students" },
+      { href: `/admin/forms.html${q}`, label: "Forms", key: "forms" },
+      { href: `/admin/submissions.html${q}`, label: "Submissions", key: "submissions" },
+      { href: `/admin/handout-orders.html${q}`, label: "Handout Orders", key: "handouts" },
+      { href: `/admin/payments.html${q}`, label: "Payments", key: "payments" },
     ];
-
-    if (user && user.role === "admin") {
-      links.push({ href: "/admin/class-reps.html", label: "Class Reps", key: "class-reps" });
-    }
-
-    const iconMap = {
-      dashboard: "📊",
-      students: "🎓",
-      forms: "📝",
-      submissions: "📬",
-      handouts: "📦",
-      payments: "💰",
-      "class-reps": "👥",
-    };
-
-    sidebar.innerHTML = links.map((l) => `
-      <a href="${l.href}" class="${activePage === l.key ? "active" : ""}">${iconMap[l.key] || ""} ${l.label}</a>
-    `).join("");
+    sidebar.innerHTML = links.map(l => `<a href="${l.href}" class="${activePage === l.key ? 'active' : ''}">${l.label}</a>`).join("");
   },
 };

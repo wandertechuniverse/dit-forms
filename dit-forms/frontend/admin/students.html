@@ -4,6 +4,30 @@
   <meta charset="UTF-8">
   <title>Students - DIT Forms</title>
   <link rel="stylesheet" href="/assets/css/style.css">
+  <style>
+    .ic-upload-btn {
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .ic-preview {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .ic-upload-overlay {
+      position: relative;
+      display: inline-block;
+    }
+    .ic-upload-overlay input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
   <div class="app-layout">
@@ -11,14 +35,11 @@
       <h1>DIT Forms</h1>
       <nav id="sidebar-nav"></nav>
     </aside>
-
     <main class="main-content">
       <div class="topbar">
         <h2>Students</h2>
         <div class="user-info" id="user-info"></div>
       </div>
-
-      <!-- Import Card -->
       <div class="card">
         <h3>Import Students from Excel</h3>
         <div id="import-alert"></div>
@@ -26,18 +47,13 @@
           <div class="form-group">
             <label>Excel File (.xlsx)</label>
             <input type="file" id="excel-file" accept=".xlsx,.xls" class="form-control" required>
-            <small class="text-muted">
-              Expected columns: Student Name, ID Number (Class/Term optional if provided below)
-            </small>
           </div>
           <button type="submit" class="btn btn-success" id="import-btn">Upload & Import</button>
         </form>
       </div>
-
-      <!-- Search & List -->
       <div class="card">
         <div class="flex-between mb-2">
-          <h3>Student List <span class="text-muted" id="student-count">0</span></h3>
+          <h3>Student List</h3>
           <button class="btn btn-primary" onclick="openAddModal()">+ Add Student</button>
         </div>
         <div class="form-group">
@@ -45,23 +61,37 @@
         </div>
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Full Name</th>
-                <th>ID Number</th>
-                <th>Program Class</th>
-                <th>Term</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody id="students-tbody">
-              <tr><td colspan="6" class="text-center">Loading...</td></tr>
-            </tbody>
+            <thead><tr><th>IC</th><th>Full Name</th><th>ID Number</th><th>Program Class</th><th>Term</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="students-tbody"><tr><td colspan="7" class="text-center">Loading...</td></tr></tbody>
           </table>
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- IC Upload Modal -->
+  <div id="ic-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;">
+    <div class="card" style="width:450px;">
+      <h3>Upload IC Card</h3>
+      <p class="text-muted mb-2" id="ic-student-name"></p>
+      <div id="ic-alert"></div>
+      <div class="ic-upload-zone" id="ic-drop-zone"
+           style="border:2px dashed #ccc;border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:border-color 0.2s;">
+        <div id="ic-upload-content">
+          <p>Click or drag to upload IC image</p>
+          <p class="text-muted">JPG, PNG, PDF (max 5MB)</p>
+        </div>
+        <div id="ic-preview-container" class="hidden" style="text-align:center;">
+          <img id="ic-preview-img" src="" alt="IC Preview" style="max-width:100%;max-height:200px;border-radius:4px;">
+          <p id="ic-file-name" class="mt-1"></p>
+        </div>
+        <input type="file" id="ic-file-input" accept=".jpg,.jpeg,.png,.pdf" style="display:none;">
+      </div>
+      <div class="flex gap-1 mt-2">
+        <button type="button" class="btn btn-primary" id="ic-upload-btn" disabled>Upload</button>
+        <button type="button" class="btn btn-secondary" onclick="closeICModal()">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <!-- Add Student Modal -->
@@ -69,14 +99,8 @@
     <div class="card" style="width:400px;">
       <h3>Add Student</h3>
       <form id="add-form">
-        <div class="form-group">
-          <label>Full Name</label>
-          <input type="text" id="add-name" class="form-control" required>
-        </div>
-        <div class="form-group">
-          <label>ID Number</label>
-          <input type="text" id="add-id" class="form-control" required>
-        </div>
+        <div class="form-group"><label>Full Name</label><input type="text" id="add-name" class="form-control" required></div>
+        <div class="form-group"><label>ID Number</label><input type="text" id="add-id" class="form-control" required></div>
         <div class="flex gap-1 mt-2">
           <button type="submit" class="btn btn-primary">Save</button>
           <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
@@ -90,97 +114,168 @@
   <script src="/assets/js/utils.js"></script>
   <script>
     let currentScope = {};
+    let selectedICFile = null;
+    let currentICStudentId = null;
 
     (async () => {
       const user = await auth.requireLogin();
       if (!user) return;
       auth.renderTopbar(user);
-      auth.renderSidebar("students", user);
-
+      auth.renderSidebar("students");
       currentScope = getScope();
-      if (!currentScope.programClassId || !currentScope.termId) {
-        alert("Please select a scope on the Dashboard first.");
-        window.location.href = "/admin/dashboard.html";
-        return;
-      }
+      if (!currentScope.programClassId || !currentScope.termId) { alert("Please select a scope on the Dashboard first."); window.location.href = "/admin/dashboard.html"; return; }
       loadStudents();
     })();
 
-    document.getElementById("search").addEventListener("input",
-      utils.debounce((e) => loadStudents(e.target.value))
-    );
+    let searchTimer;
+    document.getElementById("search").addEventListener("input", (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadStudents(e.target.value), 300); });
 
     async function loadStudents(q = "") {
       const tbody = document.getElementById("students-tbody");
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading...</td></tr>';
       try {
-        let url = `/students?programClassId=${currentScope.programClassId}&termId=${currentScope.termId}`;
-        if (q) url += `&q=${encodeURIComponent(q)}`;
+        const url = `/students?programClassId=${currentScope.programClassId}&termId=${currentScope.termId}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
         const res = await api.get(url);
-        const list = res.students || [];
-        document.getElementById("student-count").textContent = list.length;
-        if (list.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No students found</td></tr>';
-          return;
-        }
-        tbody.innerHTML = list.map((s, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td><strong>${utils.escapeHtml(s.fullName)}</strong></td>
+        if (res.students.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No students found</td></tr>'; return; }
+        tbody.innerHTML = res.students.map(s => {
+          const icCell = s.icDocumentUrl
+            ? `<img src="${s.icDocumentUrl}" class="ic-preview" onclick="window.open('${s.icDocumentUrl}','_blank')" title="View IC">`
+            : `<button class="btn btn-secondary ic-upload-btn" onclick="openICModal('${s.id}','${utils.escapeHtml(s.fullName)}')">+ IC</button>`;
+          return `<tr>
+            <td>${icCell}</td>
+            <td>${utils.escapeHtml(s.fullName)}</td>
             <td><code>${utils.escapeHtml(s.idNumber)}</code></td>
             <td>${utils.escapeHtml(s.programClassId)}</td>
             <td>${utils.escapeHtml(s.termId)}</td>
             <td>${utils.formatDate(s.createdAt)}</td>
-          </tr>
-        `).join("");
-      } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Error: ${err.message}</td></tr>`;
-      }
+            <td>
+              ${s.icDocumentUrl
+                ? `<button class="btn btn-danger" style="padding:2px 6px;font-size:11px;" onclick="deleteIC('${s.id}')">Remove IC</button>`
+                : ''}
+            </td>
+          </tr>`;
+        }).join("");
+      } catch (err) { tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Error: ${err.message}</td></tr>`; }
     }
 
+    // IC Upload Functions
+    function openICModal(studentId, studentName) {
+      currentICStudentId = studentId;
+      selectedICFile = null;
+      document.getElementById("ic-student-name").textContent = `Student: ${studentName}`;
+      document.getElementById("ic-preview-container").classList.add("hidden");
+      document.getElementById("ic-upload-content").classList.remove("hidden");
+      document.getElementById("ic-upload-btn").disabled = true;
+      document.getElementById("ic-file-input").value = "";
+      document.getElementById("ic-alert").innerHTML = "";
+      document.getElementById("ic-modal").classList.remove("hidden");
+    }
+
+    function closeICModal() {
+      document.getElementById("ic-modal").classList.add("hidden");
+      currentICStudentId = null;
+      selectedICFile = null;
+    }
+
+    const dropZone = document.getElementById("ic-drop-zone");
+    const fileInput = document.getElementById("ic-file-input");
+
+    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.style.borderColor = "#4f46e5"; });
+    dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = "#ccc"; });
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = "#ccc";
+      if (e.dataTransfer.files.length) handleICFile(e.dataTransfer.files[0]);
+    });
+
+    fileInput.addEventListener("change", (e) => {
+      if (e.target.files.length) handleICFile(e.target.files[0]);
+    });
+
+    function handleICFile(file) {
+      const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+      if (!allowedTypes.includes(file.type)) {
+        utils.showAlert("ic-alert", "Only JPG, PNG, or PDF files are allowed", "danger");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        utils.showAlert("ic-alert", "File must be under 5MB", "danger");
+        return;
+      }
+      selectedICFile = file;
+      document.getElementById("ic-upload-btn").disabled = false;
+
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById("ic-preview-img").src = e.target.result;
+          document.getElementById("ic-preview-container").classList.remove("hidden");
+          document.getElementById("ic-upload-content").classList.add("hidden");
+        };
+        reader.readAsDataURL(file);
+      } else {
+        document.getElementById("ic-preview-container").classList.add("hidden");
+        document.getElementById("ic-upload-content").innerHTML = `<p>PDF Selected: ${file.name}</p>`;
+      }
+      document.getElementById("ic-file-name").textContent = file.name;
+    }
+
+    document.getElementById("ic-upload-btn").addEventListener("click", async () => {
+      if (!selectedICFile || !currentICStudentId) return;
+      const btn = document.getElementById("ic-upload-btn");
+      utils.setLoading(btn, true);
+      try {
+        const formData = new FormData();
+        formData.append("file", selectedICFile);
+        await api.uploadForm(`/uploads/students/${currentICStudentId}/upload-ic`, formData);
+        closeICModal();
+        loadStudents();
+      } catch (err) {
+        let msg = "Upload failed";
+        if (err.message.includes("face")) msg = "No face detected. Ensure your ID photo is clear and centered.";
+        else if (err.message.includes("blurry") || err.message.includes("dark")) msg = "Image too blurry/dark. Retake in bright, even lighting.";
+        else if (err.message.includes("large")) msg = "File too large. Max 5MB allowed.";
+        else msg = err.message;
+        utils.showAlert("ic-alert", msg, "danger");
+      } finally { utils.setLoading(btn, false); }
+    });
+
+    async function deleteIC(studentId) {
+      if (!confirm("Remove this IC document?")) return;
+      try {
+        await api.delete(`/uploads/students/${studentId}/ic`);
+        loadStudents();
+      } catch (err) { alert("Failed: " + err.message); }
+    }
+
+    // Import form
     document.getElementById("import-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const fileInput = document.getElementById("excel-file");
       const btn = document.getElementById("import-btn");
       if (!fileInput.files[0]) return;
-
       utils.setLoading(btn, true);
       const formData = new FormData();
       formData.append("file", fileInput.files[0]);
       formData.append("programClassId", currentScope.programClassId);
       formData.append("termId", currentScope.termId);
-
       try {
         const res = await api.uploadForm("/students/import", formData);
-        const msg = `Imported ${res.created || 0} students. ${(res.skipped_duplicates || 0)} duplicates skipped.`;
-        utils.showAlert("import-alert", msg, "success");
+        utils.showAlert("import-alert", `Imported ${res.created} students. ${res.skipped_duplicates} duplicates skipped.` + (res.errors.length ? ` Errors: ${res.errors.join(", ")}` : ""), "success");
         fileInput.value = "";
         loadStudents();
-      } catch (err) {
-        utils.showAlert("import-alert", "Import failed: " + err.message, "danger");
-      } finally {
-        utils.setLoading(btn, false);
-      }
+      } catch (err) { utils.showAlert("import-alert", "Import failed: " + err.message, "danger"); } finally { utils.setLoading(btn, false); }
     });
 
     function openAddModal() { document.getElementById("add-modal").classList.remove("hidden"); }
     function closeAddModal() { document.getElementById("add-modal").classList.add("hidden"); }
-
     document.getElementById("add-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       try {
-        await api.post("/students", {
-          fullName: document.getElementById("add-name").value,
-          idNumber: document.getElementById("add-id").value,
-          programClassId: currentScope.programClassId,
-          termId: currentScope.termId,
-        });
-        closeAddModal();
-        e.target.reset();
-        loadStudents();
-      } catch (err) {
-        alert("Failed to add student: " + err.message);
-      }
+        await api.post("/students", { fullName: document.getElementById("add-name").value, idNumber: document.getElementById("add-id").value, programClassId: currentScope.programClassId, termId: currentScope.termId });
+        closeAddModal(); e.target.reset(); loadStudents();
+      } catch (err) { alert("Failed to add student: " + err.message); }
     });
   </script>
 </body>

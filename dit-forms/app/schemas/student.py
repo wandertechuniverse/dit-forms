@@ -28,6 +28,8 @@ class StudentResponse(BaseModel):
     fullName: str
     idNumber: str
     groups: List[str] = Field(default_factory=list)
+    icDocumentUrl: Optional[str] = None
+    icPublicId: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime
 

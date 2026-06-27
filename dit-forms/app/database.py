@@ -4,7 +4,7 @@ from beanie import init_beanie
 from app.config import get_settings
 from app.models import (
     User, Student, FormDefinition, FormVersion,
-    FormSubmission, SubmissionFile, HandoutOrder, Payment,
+    FormSubmission, SubmissionFile, HandoutOrder, Payment, AlertLog,
 )
 from app.models.group import StudentGroup
 
@@ -26,5 +26,6 @@ async def init_db() -> None:
             SubmissionFile,
             HandoutOrder,
             Payment,
+            AlertLog,
         ],
     )

@@ -10,9 +10,7 @@
     <div class="login-box">
       <h1>DIT Forms</h1>
       <p class="subtitle">Sign in to your account</p>
-
       <div id="alert-box"></div>
-
       <form id="login-form">
         <div class="form-group">
           <label for="email">Email</label>
@@ -22,29 +20,23 @@
           <label for="password">Password</label>
           <input type="password" id="password" class="form-control" required>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1rem;">
-          Sign In
-        </button>
+        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1rem;">Sign In</button>
       </form>
     </div>
   </div>
-
   <script src="/assets/js/api.js"></script>
   <script src="/assets/js/utils.js"></script>
   <script>
-    if (api.getToken()) {
-      window.location.href = "/admin/dashboard.html";
-    }
-
+    if (api.getToken()) window.location.href = "/admin/dashboard.html";
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
       const btn = e.target.querySelector("button");
       utils.setLoading(btn, true);
-
       try {
-        const res = await api.post("/auth/login", { email, password });
+        const res = await api.post("/auth/login", {
+          email: document.getElementById("email").value,
+          password: document.getElementById("password").value,
+        });
         api.setToken(res.access_token);
         window.location.href = "/admin/dashboard.html";
       } catch (err) {

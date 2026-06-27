@@ -1,35 +1,21 @@
 const utils = {
   formatDate(iso) {
     if (!iso) return "—";
-    const d = new Date(iso);
-    return d.toLocaleString();
+    return new Date(iso).toLocaleString();
   },
-
-  formatMoney(amount, currency = "KES") {
-    return new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency,
-    }).format(amount);
+  formatMoney(amount, currency = "USD") {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
   },
-
   escapeHtml(str) {
     if (str == null) return "";
-    return String(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   },
-
   showAlert(containerId, message, type = "info") {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.innerHTML = `<div class="alert alert-${type}">${utils.escapeHtml(message)}</div>`;
-    if (type === "success") {
-      setTimeout(() => { container.innerHTML = ""; }, 3000);
-    }
+    const c = document.getElementById(containerId);
+    if (!c) return;
+    c.innerHTML = `<div class="alert alert-${type}">${utils.escapeHtml(message)}</div>`;
+    if (type === "success") setTimeout(() => { c.innerHTML = ""; }, 3000);
   },
-
   setLoading(btn, loading) {
     if (loading) {
       btn.dataset.originalText = btn.innerHTML;
@@ -39,17 +25,5 @@ const utils = {
       btn.innerHTML = btn.dataset.originalText || "Submit";
       btn.disabled = false;
     }
-  },
-
-  debounce(fn, ms = 300) {
-    let timer;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), ms);
-    };
-  },
-
-  async confirmAction(message) {
-    return window.confirm(message);
   },
 };
