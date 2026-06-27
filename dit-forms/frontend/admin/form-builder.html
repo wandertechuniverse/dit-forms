@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Form Builder - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <style>
+    .field-card {
+      background: #f7fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .field-card .field-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .field-card .field-type-badge {
+      background: #3182ce;
+      color: #fff;
+      padding: 0.15rem 0.5rem;
+      border-radius: 12px;
+      font-size: 0.7rem;
+    }
+    .options-list { margin-top: 0.5rem; }
+    .option-row { display: flex; gap: 0.5rem; margin-bottom: 0.25rem; }
+    .option-row input { flex: 1; }
+    .schema-preview {
+      background: #1a202c;
+      color: #68d391;
+      padding: 1rem;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.8rem;
+      max-height: 400px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <h1>DIT Forms</h1>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="topbar">
+        <h2 id="form-title">Form Builder</h2>
+        <div class="user-info" id="user-info"></div>
+      </div>
+
+      <div id="alert-box"></div>
+
+      <!-- Form Info -->
+      <div class="card" id="form-info-card" style="display:none;">
+        <h3>Form Information</h3>
+        <div id="form-info"></div>
+      </div>
+
+      <!-- Field Builder -->
+      <div class="card">
+        <div class="flex-between mb-2">
+          <h3>Build Form Fields</h3>
+          <button class="btn btn-success" onclick="addField()">+ Add Field</button>
+        </div>
+        <p class="text-muted mb-2">
+          <strong>Note:</strong> "Full Name" and "ID Number" are automatically included as base fields.
+          Add dynamic fields below.
+        </p>
+        <div id="fields-container"></div>
+
+        <div class="mt-2">
+          <button class="btn btn-primary" onclick="saveAsNewVersion()" id="save-btn">Save as New Version</button>
+          <button class="btn btn-secondary" onclick="showPreview()">Preview Schema</button>
+        </div>
+      </div>
+
+      <!-- Schema Preview -->
+      <div class="card" id="preview-card" style="display:none;">
+        <h3>Schema Preview (JSON)</h3>
+        <pre class="schema-preview" id="schema-preview"></pre>
+      </div>
+
+      <!-- Versions History -->
+      <div class="card">
+        <h3>Version History</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Fields</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="versions-tbody">
+              <tr><td colspan="4" class="text-center text-muted">No versions yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    let formId = null;
+    let formDef = null;
+    let fields = [];
+    let fieldCounter = 0;
+
+    (async () => {
+      const user = await auth.requireLogin();
+      if (!user) return;
+      auth.renderTopbar(user);
+      auth.renderSidebar("forms", user);
+
+      const params = new URLSearchParams(window.location.search);
+      formId = params.get("formId");
+      if (!formId) {
+        alert("No form ID provided");
+        window.location.href = "/admin/forms.html";
+        return;
+      }
+      await loadForm();
+    })();
+
+    async function loadForm() {
+      try {
+        const detail = await api.get(`/forms/${formId}`);
+        formDef = detail;
+        document.getElementById("form-title").textContent = "Builder: " + detail.name;
+        document.getElementById("form-info").innerHTML =
+          "<p><strong>Name:</strong> " + utils.escapeHtml(detail.name) + "</p>" +
+          "<p><strong>Type:</strong> <span class=\"badge badge-" + (detail.formType === 'handout_tracker' ? 'warning' : 'info') + "\">" + detail.formType + "</span></p>" +
+          "<p><strong>Scope:</strong> " + utils.escapeHtml(detail.programClassId) + " / " + utils.escapeHtml(detail.termId) + "</p>" +
+          "<p><strong>Purpose:</strong> " + utils.escapeHtml(detail.purpose || '\u2014') + "</p>" +
+          "<p><strong>Course:</strong> <code>" + utils.escapeHtml(detail.courseId || '\u2014') + "</code></p>";
+        document.getElementById("form-info-card").style.display = "block";
+
+        if (detail.versions && detail.versions.length > 0) {
+          const active = detail.versions.find(v => v.isActive) || detail.versions[0];
+          if (active.schema && active.schema.fields) {
+            fields = active.schema.fields;
+            renderFields();
+          }
+        }
+
+        renderVersions(detail.versions || []);
+      } catch (err) {
+        utils.showAlert("alert-box", "Failed to load form: " + err.message, "danger");
+      }
+    }
+
+    function renderVersions(versions) {
+      const tbody = document.getElementById("versions-tbody");
+      if (versions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No versions yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = versions.map(v => {
+        const activeBadge = v.isActive ? 'success' : 'secondary';
+        const activeLabel = v.isActive ? 'Active' : 'Inactive';
+        const fieldCount = (v.schema.fields || []).length;
+        return '<tr>' +
+          '<td><strong>v' + v.versionNumber + '</strong></td>' +
+          '<td><span class="badge badge-' + activeBadge + '">' + activeLabel + '</span></td>' +
+          '<td>' + fieldCount + ' fields</td>' +
+          '<td>' + utils.formatDate(v.createdAt) + '</td>' +
+          '</tr>';
+      }).join("");
+    }
+
+    function addField() {
+      fieldCounter++;
+      fields.push({
+        key: "field_" + fieldCounter,
+        label: "New Field " + fieldCounter,
+        type: "text",
+        required: false,
+        options: [],
+        accept: "",
+        maxFiles: 1,
+        placeholder: "",
+        helpText: "",
+      });
+      renderFields();
+    }
+
+    function removeField(idx) {
+      fields.splice(idx, 1);
+      renderFields();
+    }
+
+    function renderFields() {
+      const container = document.getElementById("fields-container");
+      if (fields.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">No fields yet. Click "Add Field" to start.</p>';
+        return;
+      }
+      container.innerHTML = fields.map((f, idx) => {
+        const requiredBadge = f.required ? '<span class="badge badge-danger" style="margin-left:0.25rem;">required</span>' : '';
+        let html = '<div class="field-card">' +
+          '<div class="field-header">' +
+          '<div><strong>' + utils.escapeHtml(f.label) + '</strong> ' +
+          '<span class="field-type-badge">' + f.type + '</span> ' + requiredBadge + '</div>' +
+          '<button class="btn btn-sm btn-danger" onclick="removeField(' + idx + ')">Remove</button>' +
+          '</div>' +
+          '<div class="form-row">' +
+          '<div class="form-group"><label>Field Key (unique)</label>' +
+          '<input type="text" class="form-control" value="' + utils.escapeHtml(f.key) + '" onchange="updateField(' + idx + ', \'key\', this.value)"></div>' +
+          '<div class="form-group"><label>Label</label>' +
+          '<input type="text" class="form-control" value="' + utils.escapeHtml(f.label) + '" onchange="updateField(' + idx + ', \'label\', this.value)"></div>' +
+          '</div>' +
+          '<div class="form-row">' +
+          '<div class="form-group"><label>Type</label>' +
+          '<select class="form-control" onchange="updateField(' + idx + ', \'type\', this.value); renderFields();">' +
+          '<option value="text"' + (f.type === 'text' ? ' selected' : '') + '>Text</option>' +
+          '<option value="number"' + (f.type === 'number' ? ' selected' : '') + '>Number</option>' +
+          '<option value="textarea"' + (f.type === 'textarea' ? ' selected' : '') + '>Textarea</option>' +
+          '<option value="select"' + (f.type === 'select' ? ' selected' : '') + '>Select (dropdown)</option>' +
+          '<option value="date"' + (f.type === 'date' ? ' selected' : '') + '>Date</option>' +
+          '<option value="file"' + (f.type === 'file' ? ' selected' : '') + '>File Upload</option>' +
+          '</select></div>' +
+          '<div class="form-group"><label>Required?</label>' +
+          '<select class="form-control" onchange="updateField(' + idx + ', \'required\', this.value === \'true\')">' +
+          '<option value="false"' + (!f.required ? ' selected' : '') + '>No</option>' +
+          '<option value="true"' + (f.required ? ' selected' : '') + '>Yes</option>' +
+          '</select></div>' +
+          '</div>' +
+          '<div class="form-group"><label>Placeholder (optional)</label>' +
+          '<input type="text" class="form-control" value="' + utils.escapeHtml(f.placeholder || '') + '" onchange="updateField(' + idx + ', \'placeholder\', this.value)"></div>' +
+          '<div class="form-group"><label>Help Text (optional)</label>' +
+          '<input type="text" class="form-control" value="' + utils.escapeHtml(f.helpText || '') + '" onchange="updateField(' + idx + ', \'helpText\', this.value)"></div>';
+
+        if (f.type === 'select') html += renderOptionsEditor(idx, f);
+        if (f.type === 'file') html += renderFileOptions(idx, f);
+
+        html += '</div>';
+        return html;
+      }).join("");
+    }
+
+    function renderOptionsEditor(idx, f) {
+      const options = f.options || [];
+      let html = '<div class="form-group"><label>Options (for select)</label><div class="options-list">';
+      options.forEach((opt, oi) => {
+        html += '<div class="option-row">' +
+          '<input type="text" placeholder="Label" value="' + utils.escapeHtml(opt.label) + '" onchange="updateOption(' + idx + ', ' + oi + ', \'label\', this.value)">' +
+          '<input type="text" placeholder="Value" value="' + utils.escapeHtml(opt.value) + '" onchange="updateOption(' + idx + ', ' + oi + ', \'value\', this.value)">' +
+          '<button class="btn btn-sm btn-danger" onclick="removeOption(' + idx + ', ' + oi + ')">&times;</button>' +
+          '</div>';
+      });
+      html += '</div><button class="btn btn-sm btn-secondary mt-1" onclick="addOption(' + idx + ')">+ Add Option</button></div>';
+      return html;
+    }
+
+    function renderFileOptions(idx, f) {
+      return '<div class="form-row">' +
+        '<div class="form-group"><label>Accepted file types (e.g., image/*,.pdf)</label>' +
+        '<input type="text" class="form-control" value="' + utils.escapeHtml(f.accept || '') + '" onchange="updateField(' + idx + ', \'accept\', this.value)"></div>' +
+        '<div class="form-group"><label>Max files</label>' +
+        '<input type="number" class="form-control" min="1" value="' + (f.maxFiles || 1) + '" onchange="updateField(' + idx + ', \'maxFiles\', parseInt(this.value))"></div>' +
+        '</div>';
+    }
+
+    function updateField(idx, key, value) {
+      fields[idx][key] = value;
+    }
+
+    function addOption(idx) {
+      if (!fields[idx].options) fields[idx].options = [];
+      fields[idx].options.push({ label: "Option", value: "option_value" });
+      renderFields();
+    }
+
+    function removeOption(idx, oi) {
+      fields[idx].options.splice(oi, 1);
+      renderFields();
+    }
+
+    function updateOption(idx, oi, key, value) {
+      fields[idx].options[oi][key] = value;
+    }
+
+    function buildSchema() {
+      return { fields: fields.map(f => {
+        const clean = {
+          key: f.key,
+          label: f.label,
+          type: f.type,
+          required: f.required,
+        };
+        if (f.placeholder) clean.placeholder = f.placeholder;
+        if (f.helpText) clean.helpText = f.helpText;
+        if (f.type === 'select') clean.options = f.options || [];
+        if (f.type === 'file') {
+          clean.accept = f.accept || "";
+          clean.maxFiles = f.maxFiles || 1;
+        }
+        return clean;
+      })};
+    }
+
+    function showPreview() {
+      document.getElementById("schema-preview").textContent = JSON.stringify(buildSchema(), null, 2);
+      document.getElementById("preview-card").style.display = "block";
+    }
+
+    async function saveAsNewVersion() {
+      if (fields.length === 0) {
+        utils.showAlert("alert-box", "Please add at least one field", "danger");
+        return;
+      }
+      const keys = fields.map(f => f.key);
+      if (new Set(keys).size !== keys.length) {
+        utils.showAlert("alert-box", "Field keys must be unique", "danger");
+        return;
+      }
+
+      const btn = document.getElementById("save-btn");
+      utils.setLoading(btn, true);
+      try {
+        await api.post("/forms/" + formId + "/versions", { schema: buildSchema() });
+        utils.showAlert("alert-box", "New version saved!", "success");
+        await loadForm();
+      } catch (err) {
+        utils.showAlert("alert-box", "Failed: " + err.message, "danger");
+      } finally {
+        utils.setLoading(btn, false);
+      }
+    }
+  </script>
+</body>
+</html>

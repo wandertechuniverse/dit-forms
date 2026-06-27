@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>DIT Forms</title>
+</head>
+<body>
+  <script>
+    const token = localStorage.getItem("dit_token");
+    window.location.href = token ? "/admin/dashboard.html" : "/login.html";
+  </script>
+</body>
+</html>

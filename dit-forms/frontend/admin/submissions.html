@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Submissions - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <h1>DIT Forms</h1>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="topbar">
+        <h2>Submissions</h2>
+        <div class="user-info" id="user-info"></div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card">
+        <h3>Filters</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Form</label>
+            <select id="filter-form" class="form-control">
+              <option value="">All forms</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Student Search</label>
+            <input type="text" id="filter-student" class="form-control" placeholder="Name or ID Number">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>From Date</label>
+            <input type="date" id="filter-from" class="form-control">
+          </div>
+          <div class="form-group">
+            <label>To Date</label>
+            <input type="date" id="filter-to" class="form-control">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="loadSubmissions()">Apply Filters</button>
+        <button class="btn btn-secondary" onclick="clearFilters()">Clear</button>
+      </div>
+
+      <!-- Submissions Table -->
+      <div class="card">
+        <div class="flex-between mb-2">
+          <h3>All Submissions <span id="total-count" class="text-muted"></span></h3>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Form</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="submissions-tbody">
+              <tr><td colspan="5" class="text-center">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    let currentScope = {};
+    let formsMap = {};
+
+    (async () => {
+      const user = await auth.requireLogin();
+      if (!user) return;
+      auth.renderTopbar(user);
+      auth.renderSidebar("submissions", user);
+
+      currentScope = getScope();
+      if (!currentScope.programClassId || !currentScope.termId) {
+        alert("Please select a scope on the Dashboard first.");
+        window.location.href = "/admin/dashboard.html";
+        return;
+      }
+
+      try {
+        const forms = await api.get("/forms?programClassId=" + currentScope.programClassId + "&termId=" + currentScope.termId);
+        const select = document.getElementById("filter-form");
+        forms.forEach(f => {
+          formsMap[f.id] = f.name;
+          const opt = document.createElement("option");
+          opt.value = f.id;
+          opt.textContent = f.name;
+          select.appendChild(opt);
+        });
+      } catch (e) {}
+
+      loadSubmissions();
+    })();
+
+    async function loadSubmissions() {
+      const tbody = document.getElementById("submissions-tbody");
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+
+      const formId = document.getElementById("filter-form").value;
+      const studentQ = document.getElementById("filter-student").value.trim();
+      const from = document.getElementById("filter-from").value;
+      const to = document.getElementById("filter-to").value;
+
+      let url = "/submissions?programClassId=" + currentScope.programClassId + "&termId=" + currentScope.termId;
+      if (formId) url += "&formId=" + formId;
+      if (from) url += "&dateFrom=" + new Date(from).toISOString();
+      if (to) url += "&dateTo=" + new Date(to).toISOString();
+
+      try {
+        const res = await api.get(url);
+        document.getElementById("total-count").textContent = "(" + res.total + ")";
+
+        let subs = res.submissions;
+        if (studentQ) {
+          const q = studentQ.toLowerCase();
+          subs = subs.filter(s =>
+            s.studentMatch.fullNameSnapshot.toLowerCase().includes(q) ||
+            s.studentMatch.idNumberSnapshot.toLowerCase().includes(q)
+          );
+        }
+
+        if (subs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No submissions found</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = subs.map(s => {
+          const matched = s.studentMatch.matchedStudentId ? 'matched' : 'not in list';
+          const matchClass = s.studentMatch.matchedStudentId ? '' : ' text-muted';
+          return '<tr>' +
+            '<td><strong>' + utils.escapeHtml(s.studentMatch.fullNameSnapshot) + '</strong><br>' +
+            '<small class="text-muted"><code>' + utils.escapeHtml(s.studentMatch.idNumberSnapshot) + '</code> ' + matched + '</small></td>' +
+            '<td>' + utils.escapeHtml(formsMap[s.formDefinitionId] || s.formDefinitionId.slice(-6)) + '</td>' +
+            '<td>' + utils.formatDate(s.submittedAt) + '</td>' +
+            '<td><span class="badge badge-info">' + s.status + '</span></td>' +
+            '<td><a href="/admin/submission-detail.html?id=' + s.id + '" class="btn btn-sm btn-primary">View</a></td>' +
+            '</tr>';
+        }).join("");
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Error: ' + err.message + '</td></tr>';
+      }
+    }
+
+    function clearFilters() {
+      document.getElementById("filter-form").value = "";
+      document.getElementById("filter-student").value = "";
+      document.getElementById("filter-from").value = "";
+      document.getElementById("filter-to").value = "";
+      loadSubmissions();
+    }
+  </script>
+</body>
+</html>

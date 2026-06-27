@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Forms - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <h1>DIT Forms</h1>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="topbar">
+        <h2>Forms</h2>
+        <div class="user-info" id="user-info"></div>
+      </div>
+
+      <div id="alert-box"></div>
+
+      <!-- Create Form -->
+      <div class="card">
+        <div class="flex-between mb-2">
+          <h3>Create New Form</h3>
+        </div>
+        <form id="create-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Form Name</label>
+              <input type="text" id="form-name" class="form-control" placeholder="e.g., HandOuts Tracker - Sem 1" required>
+            </div>
+            <div class="form-group">
+              <label>Form Type</label>
+              <select id="form-type" class="form-control">
+                <option value="general">General Form</option>
+                <option value="handout_tracker">HandOuts Tracker</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Purpose (optional)</label>
+              <input type="text" id="form-purpose" class="form-control" placeholder="e.g., Entrepreneurship handout">
+            </div>
+            <div class="form-group">
+              <label>Course ID (optional)</label>
+              <input type="text" id="form-course" class="form-control" placeholder="e.g., ENT101">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" id="create-btn">Create Form</button>
+        </form>
+      </div>
+
+      <!-- Forms List -->
+      <div class="card">
+        <h3>Existing Forms</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Purpose</th>
+                <th>Course</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="forms-tbody">
+              <tr><td colspan="7" class="text-center">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    let currentScope = {};
+    let currentUser = null;
+
+    (async () => {
+      currentUser = await auth.requireLogin();
+      if (!currentUser) return;
+      auth.renderTopbar(currentUser);
+      auth.renderSidebar("forms", currentUser);
+
+      currentScope = getScope();
+      if (!currentScope.programClassId || !currentScope.termId) {
+        alert("Please select a scope on the Dashboard first.");
+        window.location.href = "/admin/dashboard.html";
+        return;
+      }
+      loadForms();
+    })();
+
+    async function loadForms() {
+      const tbody = document.getElementById("forms-tbody");
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading...</td></tr>';
+      try {
+        const forms = await api.get(`/forms?programClassId=${currentScope.programClassId}&termId=${currentScope.termId}`);
+        if (forms.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No forms yet</td></tr>';
+          return;
+        }
+        tbody.innerHTML = forms.map(f => `
+          <tr>
+            <td><strong>${utils.escapeHtml(f.name)}</strong></td>
+            <td><span class="badge badge-${f.formType === 'handout_tracker' ? 'warning' : 'info'}">${f.formType}</span></td>
+            <td>${utils.escapeHtml(f.purpose || '—')}</td>
+            <td><code>${utils.escapeHtml(f.courseId || '—')}</code></td>
+            <td><span class="badge badge-${f.status === 'active' ? 'success' : 'danger'}">${f.status}</span></td>
+            <td>${utils.formatDate(f.createdAt)}</td>
+            <td>
+              <a href="/admin/form-builder.html?formId=${f.id}" class="btn btn-sm btn-primary">Edit / Add Version</a>
+            </td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    document.getElementById("create-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById("create-btn");
+      utils.setLoading(btn, true);
+      try {
+        await api.post("/forms", {
+          name: document.getElementById("form-name").value,
+          formType: document.getElementById("form-type").value,
+          purpose: document.getElementById("form-purpose").value || null,
+          courseId: document.getElementById("form-course").value || null,
+          programClassId: currentScope.programClassId,
+          termId: currentScope.termId,
+        });
+        utils.showAlert("alert-box", "Form created! Now add fields in the builder.", "success");
+        e.target.reset();
+        loadForms();
+      } catch (err) {
+        utils.showAlert("alert-box", "Failed: " + err.message, "danger");
+      } finally {
+        utils.setLoading(btn, false);
+      }
+    });
+  </script>
+</body>
+</html>

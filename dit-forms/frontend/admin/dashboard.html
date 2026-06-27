@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <h1>DIT Forms</h1>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="topbar">
+        <h2>Dashboard</h2>
+        <div class="user-info" id="user-info"></div>
+      </div>
+
+      <!-- Scope Selector -->
+      <div class="card">
+        <h3>Select Scope</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Program Class ID</label>
+            <input type="text" id="programClassId" class="form-control" placeholder="e.g., DIT-2026-A">
+          </div>
+          <div class="form-group">
+            <label>Term ID</label>
+            <input type="text" id="termId" class="form-control" placeholder="e.g., 2026-S1">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="loadDashboard()">Load Dashboard</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card primary">
+          <div class="label">Students</div>
+          <div class="value" id="stat-students">—</div>
+        </div>
+        <div class="stat-card success">
+          <div class="label">Forms</div>
+          <div class="value" id="stat-forms">—</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="label">Submissions</div>
+          <div class="value" id="stat-submissions">—</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="label">Unpaid Invoices</div>
+          <div class="value" id="stat-unpaid">—</div>
+        </div>
+      </div>
+
+      <!-- Recent Submissions -->
+      <div class="card">
+        <h3>Recent Submissions</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Form</th>
+                <th>Submitted</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recent-submissions">
+              <tr><td colspan="4" class="text-center text-muted">Select a scope to view data</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    (async () => {
+      const user = await auth.requireLogin();
+      if (!user) return;
+      auth.renderTopbar(user);
+      auth.renderSidebar("dashboard", user);
+
+      const { programClassId, termId } = getScope();
+      if (programClassId) document.getElementById("programClassId").value = programClassId;
+      if (termId) document.getElementById("termId").value = termId;
+
+      if (programClassId && termId) loadDashboard();
+    })();
+
+    async function loadDashboard() {
+      const programClassId = document.getElementById("programClassId").value.trim();
+      const termId = document.getElementById("termId").value.trim();
+      if (!programClassId || !termId) {
+        alert("Please enter both Program Class ID and Term ID");
+        return;
+      }
+      setScope(programClassId, termId);
+
+      try {
+        const [students, forms, submissions, orders] = await Promise.all([
+          api.get(`/students?programClassId=${programClassId}&termId=${termId}`),
+          api.get(`/forms?programClassId=${programClassId}&termId=${termId}`),
+          api.get(`/submissions?programClassId=${programClassId}&termId=${termId}`),
+          api.get(`/handout-orders?programClassId=${programClassId}&termId=${termId}&invoiceStatus=unpaid`),
+        ]);
+
+        document.getElementById("stat-students").textContent = (students.students || []).length;
+        document.getElementById("stat-forms").textContent = forms.length;
+        document.getElementById("stat-submissions").textContent = submissions.total;
+        document.getElementById("stat-unpaid").textContent = orders.total;
+
+        const tbody = document.getElementById("recent-submissions");
+        if (submissions.submissions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No submissions yet</td></tr>';
+        } else {
+          tbody.innerHTML = submissions.submissions.slice(0, 5).map(s => `
+            <tr>
+              <td>${utils.escapeHtml(s.studentMatch.fullNameSnapshot)}<br>
+                <small class="text-muted">${utils.escapeHtml(s.studentMatch.idNumberSnapshot)}</small>
+              </td>
+              <td>${s.formDefinitionId.slice(-6)}</td>
+              <td>${utils.formatDate(s.submittedAt)}</td>
+              <td><span class="badge badge-info">${s.status}</span></td>
+            </tr>
+          `).join("");
+        }
+      } catch (err) {
+        alert("Failed to load dashboard: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

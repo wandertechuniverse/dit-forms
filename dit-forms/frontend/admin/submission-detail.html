@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Submission Detail - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <h1>DIT Forms</h1>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="topbar">
+        <h2>Submission Detail</h2>
+        <div class="user-info" id="user-info"></div>
+      </div>
+
+      <div id="alert-box"></div>
+
+      <div id="content" style="display:none;">
+        <!-- Student Info -->
+        <div class="card">
+          <h3>Student Information</h3>
+          <div id="student-info"></div>
+        </div>
+
+        <!-- Answers -->
+        <div class="card">
+          <h3>Submission Answers</h3>
+          <div id="answers-container"></div>
+        </div>
+
+        <!-- Files -->
+        <div class="card" id="files-card" style="display:none;">
+          <h3>Attached Files</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>File Name</th>
+                  <th>Size</th>
+                  <th>Type</th>
+                  <th>Uploaded</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="files-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Linked Handout Order -->
+        <div class="card" id="handout-card" style="display:none;">
+          <h3>Linked Handout Order</h3>
+          <div id="handout-info"></div>
+        </div>
+      </div>
+
+      <div class="mt-2">
+        <a href="/admin/submissions.html" class="btn btn-secondary">Back to Submissions</a>
+      </div>
+    </main>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    let submission = null;
+    let formDef = null;
+    let formVersion = null;
+
+    (async () => {
+      const user = await auth.requireLogin();
+      if (!user) return;
+      auth.renderTopbar(user);
+      auth.renderSidebar("submissions", user);
+
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      if (!id) {
+        alert("No submission ID");
+        window.location.href = "/admin/submissions.html";
+        return;
+      }
+
+      try {
+        submission = await api.get("/submissions/" + id);
+        formDef = await api.get("/forms/" + submission.formDefinitionId);
+
+        const versionRes = await api.get("/forms/" + submission.formDefinitionId);
+        formVersion = versionRes.versions.find(v => v.id === submission.formVersionId);
+
+        renderAll();
+        document.getElementById("content").style.display = "block";
+
+        try {
+          const orders = await api.get("/handout-orders?programClassId=" + submission.programClassId + "&termId=" + submission.termId);
+          const order = orders.orders.find(o => o.formSubmissionId === submission.id);
+          if (order) renderHandoutOrder(order);
+        } catch (e) {}
+
+        loadFiles();
+      } catch (err) {
+        utils.showAlert("alert-box", "Failed to load: " + err.message, "danger");
+      }
+    })();
+
+    function renderAll() {
+      const matched = submission.studentMatch.matchedStudentId ? 'Yes' : 'Not in student list';
+      document.getElementById("student-info").innerHTML =
+        "<p><strong>Name:</strong> " + utils.escapeHtml(submission.studentMatch.fullNameSnapshot) + "</p>" +
+        "<p><strong>ID Number:</strong> <code>" + utils.escapeHtml(submission.studentMatch.idNumberSnapshot) + "</code></p>" +
+        "<p><strong>Matched Student:</strong> " + matched + "</p>" +
+        "<p><strong>Submitted:</strong> " + utils.formatDate(submission.submittedAt) + "</p>" +
+        "<p><strong>Form:</strong> " + utils.escapeHtml(formDef.name) + " (v" + (formVersion ? formVersion.versionNumber : '?') + ")</p>" +
+        "<p><strong>Status:</strong> <span class=\"badge badge-info\">" + submission.status + "</span></p>";
+
+      const answers = submission.answers || {};
+      const schemaFields = (formVersion && formVersion.schema) ? formVersion.schema.fields || [] : [];
+      const container = document.getElementById("answers-container");
+
+      const fieldMap = {};
+      schemaFields.forEach(f => fieldMap[f.key] = f);
+
+      const rows = Object.entries(answers).map(([key, value]) => {
+        const field = fieldMap[key];
+        const label = field ? field.label : key;
+        let displayValue;
+
+        if (Array.isArray(value)) {
+          if (value.length > 0 && typeof value[0] === 'string' && value[0].length === 24) {
+            displayValue = '<em>' + value.length + ' file(s) attached (see files section)</em>';
+          } else if (field && field.type === 'select' && field.options) {
+            displayValue = value.map(v => {
+              const opt = field.options.find(o => o.value === v);
+              return opt ? opt.label : v;
+            }).join(", ");
+          } else {
+            displayValue = JSON.stringify(value);
+          }
+        } else if (field && field.type === 'select' && field.options) {
+          const opt = field.options.find(o => o.value === value);
+          displayValue = opt ? opt.label : value;
+        } else if (typeof value === 'object' && value !== null) {
+          if (Array.isArray(value)) {
+            displayValue = renderHandoutLines(value);
+          } else {
+            displayValue = '<pre style="margin:0;">' + utils.escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
+          }
+        } else {
+          displayValue = utils.escapeHtml(String(value != null ? value : '\u2014'));
+        }
+
+        return '<div style="padding:0.5rem 0;border-bottom:1px solid #e2e8f0;">' +
+          '<strong>' + utils.escapeHtml(label) + '</strong>' +
+          '<div class="mt-1">' + displayValue + '</div></div>';
+      });
+
+      container.innerHTML = rows.length ? rows.join("") : '<p class="text-muted">No answers</p>';
+    }
+
+    function renderHandoutLines(lines) {
+      if (!Array.isArray(lines) || lines.length === 0) return '\u2014';
+      let html = '<table style="margin-top:0.5rem;"><thead><tr><th>Course</th><th>Item</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead><tbody>';
+      let grand = 0;
+      lines.forEach(l => {
+        const total = (l.qty || 0) * (l.unitPrice || 0);
+        grand += total;
+        html += '<tr>' +
+          '<td>' + utils.escapeHtml(l.courseId || '\u2014') + '</td>' +
+          '<td>' + utils.escapeHtml(l.handoutItemId || '\u2014') + '</td>' +
+          '<td>' + l.qty + '</td>' +
+          '<td>' + utils.formatMoney(l.unitPrice || 0) + '</td>' +
+          '<td>' + utils.formatMoney(total) + '</td></tr>';
+      });
+      html += '</tbody><tfoot><tr><td colspan="4" style="text-align:right;"><strong>Grand Total:</strong></td>' +
+        '<td><strong>' + utils.formatMoney(grand) + '</strong></td></tr></tfoot></table>';
+      return html;
+    }
+
+    async function loadFiles() {
+      try {
+        const files = await api.get("/submissions/" + submission.id + "/files");
+        if (files.length === 0) return;
+        document.getElementById("files-card").style.display = "block";
+        const tbody = document.getElementById("files-tbody");
+        tbody.innerHTML = files.map(f => {
+          const sizeKB = (f.sizeBytes / 1024).toFixed(1);
+          return '<tr>' +
+            '<td>' + utils.escapeHtml(f.fieldKey) + '</td>' +
+            '<td>' + utils.escapeHtml(f.fileName) + '</td>' +
+            '<td>' + sizeKB + ' KB</td>' +
+            '<td>' + utils.escapeHtml(f.contentType) + '</td>' +
+            '<td>' + utils.formatDate(f.uploadedAt) + '</td>' +
+            '<td><button class="btn btn-sm btn-primary" onclick="downloadFile(\'' + f.id + '\', \'' + utils.escapeHtml(f.fileName) + '\')">Download</button></td>' +
+            '</tr>';
+        }).join("");
+      } catch (err) {
+        console.error("Failed to load files:", err);
+      }
+    }
+
+    async function downloadFile(fileId, fileName) {
+      try {
+        const res = await api.get("/files/" + fileId + "/download");
+        window.open(res.downloadUrl, "_blank");
+      } catch (err) {
+        alert("Failed to get download URL: " + err.message);
+      }
+    }
+
+    function renderHandoutOrder(order) {
+      document.getElementById("handout-card").style.display = "block";
+      const statusMap = { unpaid: 'danger', partially_paid: 'warning', paid: 'success' };
+      const badge = statusMap[order.invoice.invoiceStatus] || 'info';
+
+      document.getElementById("handout-info").innerHTML =
+        "<p><strong>Order ID:</strong> <code>" + order.id + "</code></p>" +
+        "<p><strong>Given Out At:</strong> " + utils.formatDate(order.givenOutAt) + "</p>" +
+        "<p><strong>Invoice Status:</strong> <span class=\"badge badge-" + badge + "\">" + order.invoice.invoiceStatus + "</span></p>" +
+        "<p><strong>Total Amount:</strong> " + utils.formatMoney(order.invoice.totalAmount) + "</p>" +
+        '<div class="mt-2">' +
+        '<a href="/admin/handout-orders.html?id=' + order.id + '" class="btn btn-sm btn-primary">View Full Order</a> ' +
+        '<a href="/admin/payments.html?orderId=' + order.id + '" class="btn btn-sm btn-success">Record Payment</a>' +
+        '</div>';
+    }
+  </script>
+</body>
+</html>

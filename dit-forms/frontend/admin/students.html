@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Students - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <h1>DIT Forms</h1>
+      <nav id="sidebar-nav"></nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="topbar">
+        <h2>Students</h2>
+        <div class="user-info" id="user-info"></div>
+      </div>
+
+      <!-- Import Card -->
+      <div class="card">
+        <h3>Import Students from Excel</h3>
+        <div id="import-alert"></div>
+        <form id="import-form">
+          <div class="form-group">
+            <label>Excel File (.xlsx)</label>
+            <input type="file" id="excel-file" accept=".xlsx,.xls" class="form-control" required>
+            <small class="text-muted">
+              Expected columns: Student Name, ID Number (Class/Term optional if provided below)
+            </small>
+          </div>
+          <button type="submit" class="btn btn-success" id="import-btn">Upload & Import</button>
+        </form>
+      </div>
+
+      <!-- Search & List -->
+      <div class="card">
+        <div class="flex-between mb-2">
+          <h3>Student List <span class="text-muted" id="student-count">0</span></h3>
+          <button class="btn btn-primary" onclick="openAddModal()">+ Add Student</button>
+        </div>
+        <div class="form-group">
+          <input type="text" id="search" class="form-control" placeholder="Search by name or ID number...">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Full Name</th>
+                <th>ID Number</th>
+                <th>Program Class</th>
+                <th>Term</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="students-tbody">
+              <tr><td colspan="6" class="text-center">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Student Modal -->
+  <div id="add-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;">
+    <div class="card" style="width:400px;">
+      <h3>Add Student</h3>
+      <form id="add-form">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="add-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label>ID Number</label>
+          <input type="text" id="add-id" class="form-control" required>
+        </div>
+        <div class="flex gap-1 mt-2">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/auth.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    let currentScope = {};
+
+    (async () => {
+      const user = await auth.requireLogin();
+      if (!user) return;
+      auth.renderTopbar(user);
+      auth.renderSidebar("students", user);
+
+      currentScope = getScope();
+      if (!currentScope.programClassId || !currentScope.termId) {
+        alert("Please select a scope on the Dashboard first.");
+        window.location.href = "/admin/dashboard.html";
+        return;
+      }
+      loadStudents();
+    })();
+
+    document.getElementById("search").addEventListener("input",
+      utils.debounce((e) => loadStudents(e.target.value))
+    );
+
+    async function loadStudents(q = "") {
+      const tbody = document.getElementById("students-tbody");
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+      try {
+        let url = `/students?programClassId=${currentScope.programClassId}&termId=${currentScope.termId}`;
+        if (q) url += `&q=${encodeURIComponent(q)}`;
+        const res = await api.get(url);
+        const list = res.students || [];
+        document.getElementById("student-count").textContent = list.length;
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No students found</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map((s, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td><strong>${utils.escapeHtml(s.fullName)}</strong></td>
+            <td><code>${utils.escapeHtml(s.idNumber)}</code></td>
+            <td>${utils.escapeHtml(s.programClassId)}</td>
+            <td>${utils.escapeHtml(s.termId)}</td>
+            <td>${utils.formatDate(s.createdAt)}</td>
+          </tr>
+        `).join("");
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    document.getElementById("import-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("excel-file");
+      const btn = document.getElementById("import-btn");
+      if (!fileInput.files[0]) return;
+
+      utils.setLoading(btn, true);
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      formData.append("programClassId", currentScope.programClassId);
+      formData.append("termId", currentScope.termId);
+
+      try {
+        const res = await api.uploadForm("/students/import", formData);
+        const msg = `Imported ${res.created || 0} students. ${(res.skipped_duplicates || 0)} duplicates skipped.`;
+        utils.showAlert("import-alert", msg, "success");
+        fileInput.value = "";
+        loadStudents();
+      } catch (err) {
+        utils.showAlert("import-alert", "Import failed: " + err.message, "danger");
+      } finally {
+        utils.setLoading(btn, false);
+      }
+    });
+
+    function openAddModal() { document.getElementById("add-modal").classList.remove("hidden"); }
+    function closeAddModal() { document.getElementById("add-modal").classList.add("hidden"); }
+
+    document.getElementById("add-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await api.post("/students", {
+          fullName: document.getElementById("add-name").value,
+          idNumber: document.getElementById("add-id").value,
+          programClassId: currentScope.programClassId,
+          termId: currentScope.termId,
+        });
+        closeAddModal();
+        e.target.reset();
+        loadStudents();
+      } catch (err) {
+        alert("Failed to add student: " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

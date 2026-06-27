@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Submit Form - DIT Forms</title>
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <style>
+    body { background: #f5f7fa; }
+    .public-container {
+      max-width: 700px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    .form-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      padding: 2rem;
+      border-radius: 12px 12px 0 0;
+    }
+    .form-header h1 { margin-bottom: 0.5rem; }
+    .form-body {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 0 0 12px 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .success-screen {
+      text-align: center;
+      padding: 3rem;
+    }
+    .success-screen .checkmark {
+      font-size: 4rem;
+      color: #38a169;
+      margin-bottom: 1rem;
+    }
+    .handout-lines { margin-top: 1rem; }
+    .handout-line-row {
+      display: grid;
+      grid-template-columns: 2fr 2fr 1fr 1.5fr auto;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      align-items: end;
+    }
+    @media (max-width: 600px) {
+      .handout-line-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="public-container">
+    <div id="loading" class="card text-center">
+      <span class="spinner"></span> Loading form...
+    </div>
+
+    <div id="form-container" style="display:none;">
+      <div class="form-header">
+        <h1 id="form-name"></h1>
+        <p id="form-purpose"></p>
+      </div>
+      <div class="form-body">
+        <div id="alert-box"></div>
+        <form id="submit-form">
+          <!-- Base fields (always required) -->
+          <div class="form-group">
+            <label>Full Name <span style="color:#e53e3e;">*</span></label>
+            <input type="text" id="base-fullName" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label>ID Number <span style="color:#e53e3e;">*</span></label>
+            <input type="text" id="base-idNumber" class="form-control" required>
+          </div>
+
+          <!-- Dynamic fields rendered here -->
+          <div id="dynamic-fields"></div>
+
+          <button type="submit" class="btn btn-primary" style="width:100%;margin-top:1.5rem;padding:0.75rem;" id="submit-btn">
+            Submit Form
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div id="success-screen" class="card success-screen" style="display:none;">
+      <div class="checkmark">&#10003;</div>
+      <h2>Submission Received!</h2>
+      <p class="text-muted mt-1">Thank you. Your form has been submitted successfully.</p>
+      <p class="mt-2"><small>Submission ID: <code id="submission-id"></code></small></p>
+    </div>
+  </div>
+
+  <script src="/assets/js/api.js"></script>
+  <script src="/assets/js/utils.js"></script>
+  <script>
+    let formId = null;
+    let formData = null;
+    let submissionId = null;
+
+    (async () => {
+      const params = new URLSearchParams(window.location.search);
+      formId = params.get("formId");
+      if (!formId) {
+        document.getElementById("loading").innerHTML = '<p class="text-muted">No form ID provided</p>';
+        return;
+      }
+
+      try {
+        formData = await api.get("/public/forms/" + formId);
+        document.getElementById("form-name").textContent = formData.name;
+        document.getElementById("form-purpose").textContent = formData.purpose || "";
+        renderDynamicFields();
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("form-container").style.display = "block";
+      } catch (err) {
+        document.getElementById("loading").innerHTML = '<p class="text-muted">Failed to load form: ' + err.message + '</p>';
+      }
+    })();
+
+    function renderDynamicFields() {
+      const container = document.getElementById("dynamic-fields");
+      const fields = formData.schema.fields || [];
+      container.innerHTML = fields.map(f => renderField(f).join("")).join("");
+
+      fields.filter(f => f.type === 'file').forEach(f => {
+        const input = document.getElementById("field-" + f.key);
+        if (input) {
+          input.addEventListener("change", () => handleFileSelection(f.key, input.files));
+        }
+      });
+    }
+
+    function renderField(f) {
+      const req = f.required ? '<span style="color:#e53e3e;">*</span>' : '';
+      const reqAttr = f.required ? ' required' : '';
+      const placeholder = f.placeholder ? ' placeholder="' + utils.escapeHtml(f.placeholder) + '"' : '';
+      const help = f.helpText ? '<small class="text-muted">' + utils.escapeHtml(f.helpText) + '</small>' : '';
+
+      let input = '';
+      switch (f.type) {
+        case 'text':
+          input = '<input type="text" id="field-' + f.key + '" class="form-control"' + placeholder + reqAttr + '>';
+          break;
+        case 'number':
+          input = '<input type="number" id="field-' + f.key + '" class="form-control"' + placeholder + reqAttr + ' step="any">';
+          break;
+        case 'textarea':
+          input = '<textarea id="field-' + f.key + '" class="form-control" rows="4"' + placeholder + reqAttr + '></textarea>';
+          break;
+        case 'date':
+          input = '<input type="date" id="field-' + f.key + '" class="form-control"' + reqAttr + '>';
+          break;
+        case 'select':
+          const opts = (f.options || []).map(o => '<option value="' + utils.escapeHtml(o.value) + '">' + utils.escapeHtml(o.label) + '</option>').join("");
+          input = '<select id="field-' + f.key + '" class="form-control"' + reqAttr + '><option value="">-- Select --</option>' + opts + '</select>';
+          break;
+        case 'file':
+          const accept = f.accept ? ' accept="' + utils.escapeHtml(f.accept) + '"' : '';
+          const multiple = (f.maxFiles || 1) > 1 ? ' multiple' : '';
+          input = '<input type="file" id="field-' + f.key + '" class="form-control"' + accept + multiple + '>';
+          break;
+        default:
+          input = '<input type="text" id="field-' + f.key + '" class="form-control"' + reqAttr + '>';
+      }
+
+      return '<div class="form-group"><label>' + utils.escapeHtml(f.label) + ' ' + req + '</label>' + input + help + '</div>';
+    }
+
+    const pendingFiles = {};
+
+    function handleFileSelection(fieldKey, fileList) {
+      if (fileList && fileList.length > 0) {
+        pendingFiles[fieldKey] = Array.from(fileList);
+      } else {
+        delete pendingFiles[fieldKey];
+      }
+    }
+
+    document.getElementById("submit-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById("submit-btn");
+      utils.setLoading(btn, true);
+
+      try {
+        const answers = {};
+        const fields = formData.schema.fields || [];
+
+        for (const f of fields) {
+          if (f.type === 'file') continue;
+          const el = document.getElementById("field-" + f.key);
+          if (!el) continue;
+          let val = el.value;
+          if (f.type === 'number' && val !== '') val = parseFloat(val);
+          if (val !== '' && val !== null && val !== undefined) {
+            answers[f.key] = val;
+          }
+        }
+
+        const res = await api.post("/public/forms/" + formId + "/submit", {
+          fullName: document.getElementById("base-fullName").value,
+          idNumber: document.getElementById("base-idNumber").value,
+          answers,
+        });
+
+        submissionId = res.submissionId;
+
+        for (const [fieldKey, files] of Object.entries(pendingFiles)) {
+          for (const file of files) {
+            const presign = await api.post("/submissions/" + submissionId + "/files/presign", {
+              fieldKey,
+              fileName: file.name,
+              contentType: file.type,
+              sizeBytes: file.size,
+            });
+            await fetch(presign.uploadUrl, {
+              method: "PUT",
+              body: file,
+              headers: { "Content-Type": file.type },
+            });
+          }
+        }
+
+        document.getElementById("form-container").style.display = "none";
+        document.getElementById("success-screen").style.display = "block";
+        document.getElementById("submission-id").textContent = submissionId;
+      } catch (err) {
+        utils.showAlert("alert-box", "Submission failed: " + err.message, "danger");
+      } finally {
+        utils.setLoading(btn, false);
+      }
+    });
+  </script>
+</body>
+</html>
