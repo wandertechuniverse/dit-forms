@@ -2,9 +2,9 @@ name: DIT Forms CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 env:
   DOCKER_IMAGE: ghcr.io/${{ github.repository }}/dit-forms-backend
@@ -28,9 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install backend dependencies
-        run: |
-          cd dit-forms
-          pip install -r requirements.txt pytest
+        run: pip install -r requirements.txt pytest
 
       - name: Run E2E Test Script
         env:
@@ -38,15 +36,13 @@ jobs:
           MONGO_DB: dit_forms_ci
           JWT_SECRET: test-secret-for-ci
           JWT_EXPIRE_MINUTES: 60
-        run: |
-          cd dit-forms
-          python app/scripts/e2e_test.py
+        run: python app/scripts/e2e_test.py
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
 
       - name: Install frontend dependencies & build
         run: |
-          cd dit-forms/frontend-react
+          cd frontend-react
           bun install
           bun run build

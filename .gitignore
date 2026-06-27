@@ -32,7 +32,11 @@ backups/
 # Docker
 docker-compose.prod.yml
 
-# Sensitive files (student data, PDFs)
-DIT FULL LIST*.xlsx
+# Sensitive files - student data, PDFs, financial records
+*.xlsx
 *.pdf
-dit-forms/DIT FULL LIST*.xlsx
+*.csv
+DIT Forms Ap.md
+DIT Forms Ap sYS.md
+AGENT.md
+SKILL.md

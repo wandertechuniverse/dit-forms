@@ -5,7 +5,7 @@ on:
     workflows: ["DIT Forms CI/CD"]
     types:
       - completed
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
   deploy:
@@ -25,18 +25,18 @@ jobs:
       - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./dit-forms
-          file: ./dit-forms/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
-          tags: ${{ env.DOCKER_IMAGE }}:latest
+          tags: ghcr.io/${{ github.repository }}/dit-forms-backend:latest
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./dit-forms/frontend-react
-          file: ./dit-forms/frontend-react/Dockerfile.prod
+          context: ./frontend-react
+          file: ./frontend-react/Dockerfile.prod
           push: true
-          tags: ${{ env.FRONTEND_IMAGE }}:latest
+          tags: ghcr.io/${{ github.repository }}/dit-forms-frontend:latest
 
       - name: Deploy to Server
         uses: appleboy/ssh-action@v1.0.3
@@ -48,7 +48,6 @@ jobs:
             cd /opt/dit-forms
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml run --rm backend python app/scripts/migrate_version_status.py
             docker compose -f docker-compose.prod.yml up -d --force-recreate
             docker image prune -f
 

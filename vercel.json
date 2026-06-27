@@ -1,7 +1,8 @@
 {
-  "buildCommand": "",
-  "outputDirectory": "dit-forms/frontend",
-  "framework": null,
+  "buildCommand": "cd frontend-react && bun run build",
+  "outputDirectory": "frontend-react/dist",
+  "installCommand": "cd frontend-react && bun install",
+  "framework": "vite",
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -11,7 +12,8 @@
     }
   ],
   "rewrites": [
-    { "source": "/admin/(.*)", "destination": "/admin/index.html" },
-    { "source": "/public/(.*)", "destination": "/public/index.html" }
+    { "source": "/admin/(.*)", "destination": "/index.html" },
+    { "source": "/public/(.*)", "destination": "/index.html" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }
