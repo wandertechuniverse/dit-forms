@@ -1,254 +1,120 @@
 # Admin Troubleshooting Runbook
+**DIT Tracker Production Environment | Emergency Response Guide**
 
-## DIT Forms — Production Operations
-
----
-
-## Architecture Overview
-
-| Component | URL | Hosting |
-|---|---|---|
-| Frontend | https://dit-tracker.vercel.app | Vercel (static) |
-| Backend | https://dit-l200-api.onrender.com | Render (Docker) |
-| Database | MongoDB Atlas | Cloud |
-| File Storage | Cloudflare R2 | Cloud |
-| CI/CD | GitHub Actions | Auto-deploy on push to `main` |
-
----
-
-## Quick Health Check
+## 1. System Health Checks
 
 ```bash
-# Backend health
-curl https://dit-l200-api.onrender.com/health
+# Check all services running
+cd /opt/dit-forms && docker compose ps
 
-# Expected response:
-# {"status":"ok","app":"DIT Forms"}
+# Test backend health
+curl http://localhost/health
+
+# Test frontend proxy
+curl http://localhost/api/health
+
+# View recent backend errors
+docker compose logs backend --tail=100 | grep ERROR
 ```
 
----
+## 2. Common Issues & Fixes
 
-## Common Issues & Fixes
+### Backend Won't Start
 
-### 1. Frontend shows "Network Error" or 404 on API calls
-
-**Cause:** `VITE_API_BASE_URL` not set or wrong.
-
-**Fix:**
-1. Go to Vercel Dashboard → Settings → Environment Variables
-2. Verify `VITE_API_BASE_URL` = `https://dit-l200-api.onrender.com`
-3. Trigger redeploy: Deployments → ⋯ → Redeploy
-
----
-
-### 2. CORS errors in browser console
-
-**Cause:** Backend doesn't allow requests from Vercel domain.
-
-**Fix:**
-1. Go to Render Dashboard → Environment
-2. Set `CORS_ORIGINS` = `https://dit-tracker.vercel.app,http://localhost:3000`
-3. Service auto-redeploys
-
----
-
-### 3. Backend returning 500 errors
-
-**Check logs:**
 ```bash
-# On Render dashboard: Logs tab
-# Or via CLI if you have access:
-curl https://dit-l200-api.onrender.com/health
+# Check logs for specific error
+docker compose logs backend --tail=50
+
+# Common causes:
+# - Missing env vars: docker compose config
+# - DB connection fail: verify MONGO_URI in .env.production
+# - Port conflict: sudo lsof -i :8000
+
+# Restart with fresh build
+docker compose down && docker compose up -d --build
 ```
 
-**Common causes:**
-- MongoDB Atlas IP whitelist changed
-- JWT secret mismatch
-- Missing environment variables
+### Frontend Shows Blank Page / API Errors
 
-**Fix:** Check Render environment variables match `.env.production.example`
-
----
-
-### 4. PDF invoice download fails
-
-**Cause:** `reportlab` not installed in backend image.
-
-**Fix:**
-1. Ensure `reportlab==4.2.2` is in `requirements.txt`
-2. Push to `main` to trigger Docker rebuild
-3. Verify: download a PDF from the live site
-
----
-
-### 5. Students can't submit forms
-
-**Check:**
-1. Is the form published? (status = "published", not "draft")
-2. Is the form type "handout_tracker"?
-3. Does the student ID exist in the students collection?
-
-**Fix:**
 ```bash
-# Check form status via API
-curl -H "Authorization: Bearer $TOKEN" \
-  https://dit-l200-api.onrender.com/forms | python -m json.tool
+# Verify Vercel env var is set correctly
+# VITE_API_BASE_URL = https://dit-l200-api.onrender.com
+
+# Check browser console for CORS errors
+# Fix: Update Render CORS_ORIGINS to include https://dit-tracker.vercel.app
+
+# Force Vercel redeploy
+vercel --prod
 ```
 
----
+### PDF Invoice Generation Fails
 
-### 6. Duplicate handout not being blocked
-
-**Cause:** Form version or submission service has wrong status check.
-
-**Verify:** In `submission_service.py`:
-- `form_def.status != "published"` (not "active")
-- `FormVersion.status == "published"` (not `isActive == True`)
-
----
-
-### 7. PWA not installing on mobile
-
-**Check:**
-- HTTPS is working (Vercel provides this)
-- `manifest.json` exists at `/manifest.json`
-- Service worker registered (`/sw.js`)
-- User visited the site at least twice
-
----
-
-### 8. Render service sleeping (free tier)
-
-**Symptom:** First request after idle takes 30+ seconds.
-
-**Fix options:**
-- Upgrade to paid tier (no sleep)
-- Add a cron ping every 10 minutes:
-  ```bash
-  # Crontab on any server:
-  */10 * * * * curl -s https://dit-l200-api.onrender.com/health > /dev/null
-  ```
-
----
-
-## Database Operations
-
-### Backup MongoDB Atlas
 ```bash
-# Via Atlas UI: Database → Backup → Take Snapshot
-# Or mongodump:
-mongodump "mongodb+srv://user:pass@cluster.mongodb.net/dit_forms" --out /backups/$(date +%Y%m%d)
+# Verify reportlab is installed in backend image
+docker compose exec backend pip show reportlab
+
+# If missing, rebuild backend image
+docker compose build backend && docker compose up -d backend
 ```
 
-### Restore from Backup
+### Database Connection Issues
+
 ```bash
-mongorestore "mongodb+srv://user:pass@cluster.mongodb.net/dit_forms" /backups/20260627/
+# Test MongoDB connectivity from backend container
+docker compose exec backend mongosh "$MONGO_URI" --eval "db.runCommand({ping:1})"
+
+# Check backup integrity
+ls -la /opt/dit-forms/backups/
 ```
 
-### Run Migration Script
+## 3. Emergency Rollback Procedure
+
+If a deployment breaks production:
+
 ```bash
-# After schema changes:
-docker compose exec backend python app/scripts/migrate_version_status.py
+cd /opt/dit-forms
+
+# Stop broken containers
+docker compose down
+
+# Pull last known-good images (if using SHA tags)
+# OR revert docker-compose.yml to previous version
+git checkout HEAD~1 docker-compose.prod.yml
+
+# Restart with previous state
+docker compose up -d
+
+# Verify rollback
+curl http://localhost/health
 ```
 
-### Seed Admin User
+## 4. Data Recovery & Backups
+
 ```bash
-docker compose exec backend python app/scripts/seed_admin.py
+# List available backups
+ls -la /opt/dit-forms/backups/
+
+# Restore from backup (CAUTION: Overwrites current DB)
+docker compose exec mongodb mongorestore \
+  --uri="mongodb://${MONGO_USER}:${MONGO_PASS}@localhost:27017/dit_forms?authSource=admin" \
+  /backups/YYYYMMDD/dit_forms
+
+# Verify restoration
+docker compose exec backend python app/scripts/smoke_test.py
 ```
 
----
+## 5. Security Incident Response
 
-## Deploy Operations
-
-### Manual Deploy (after code push)
-Vercel auto-deploys on push to `main`. For Render:
-1. Push to `main`
-2. Render auto-builds from `Dockerfile`
-3. Health check passes → traffic routes to new container
-
-### Rollback
-```bash
-# Vercel: Dashboard → Deployments → click ⋯ on previous → Promote to Production
-# Render: Dashboard → Manual Deploy → redeploy previous image
-```
-
-### Force Redeploy
-```bash
-# Vercel: Dashboard → Deployments → ⋯ → Redeploy
-# Render: Dashboard → Manual Deploy → Clear build cache & deploy
-```
-
----
-
-## User Management
-
-### Create a Class Rep
-1. Admin Dashboard → Class Reps
-2. Enter email, password
-3. Assign scope: programClassId + termId
-4. Share login credentials
-
-### Import Students
-1. Go to Students page
-2. Click "Import Student List"
-3. Upload Excel file (.xlsx)
-4. Columns: idNumber, fullName, programClassId, termId
-5. System skips duplicates automatically
-
-### Reset Admin Password
-```python
-# Run in Python shell with DB access:
-from app.models.user import User
-from app.core.security import hash_password
-import asyncio
-
-async def reset():
-    user = await User.find_one(User.email == "admin@dit.edu")
-    user.hashedPassword = hash_password("new_password_here")
-    await user.save()
-
-asyncio.run(reset())
-```
-
----
-
-## Monitoring Checklist
-
-| Task | How | Frequency |
-|---|---|---|
-| Backend health | `curl /health` | Daily |
-| Check for 500 errors | Render logs | Daily |
-| Test PDF download | Download from live site | Weekly |
-| Verify backups | Restore test | Monthly |
-| Rotate JWT secret | Update env var | Quarterly |
-| Check disk usage | Render dashboard | Monthly |
-| Review CORS config | Browser console | After changes |
-
----
-
-## Environment Variables Reference
-
-| Variable | Where | Purpose |
-|---|---|---|
-| `MONGO_URI` | Render | MongoDB connection string |
-| `JWT_SECRET` | Render | Token signing secret |
-| `CORS_ORIGINS` | Render | Allowed frontend domains |
-| `R2_ENDPOINT` | Render | Cloudflare R2 endpoint |
-| `R2_ACCESS_KEY` | Render | R2 API key |
-| `R2_SECRET_KEY` | Render | R2 API secret |
-| `VITE_API_BASE_URL` | Vercel | Backend API URL |
-
----
-
-## Emergency Contacts
-
-| Role | Contact |
+| Scenario | Immediate Action |
 |---|---|
-| System Admin | admin@dit.edu |
-| MongoDB Atlas | Atlas Dashboard → Support |
-| Vercel | Vercel Dashboard → Support |
-| Render | Render Dashboard → Support |
+| Suspected breach | Rotate JWT_SECRET + R2 keys via GitHub Secrets; redeploy |
+| Unauthorized access | Revoke compromised user tokens; audit `/admin/users` |
+| Data leak | Disable public endpoints; rotate DB credentials |
+| DDoS | Enable Cloudflare WAF; rate-limit Nginx |
 
----
+## 6. Maintenance Schedule
 
-*Last updated: June 2026*
+- **Daily:** Check cron backup logs (`/var/log/cron`)
+- **Weekly:** Review backend error logs; test PDF generation
+- **Monthly:** Restore test DB from backup; rotate secrets
+- **Quarterly:** Full security audit; update Docker base images
