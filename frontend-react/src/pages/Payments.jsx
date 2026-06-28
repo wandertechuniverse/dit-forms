@@ -9,6 +9,14 @@ import {
   Search, Filter, ExternalLink, DollarSign,
 } from 'lucide-react';
 
+const METHOD_OPTIONS = [
+  { value: '', label: 'All' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank', label: 'Bank' },
+  { value: 'mobile', label: 'Mobile' },
+  { value: 'other', label: 'Other' },
+];
+
 export default function Payments() {
   const scope = getScope();
   const { play } = useSound();
@@ -36,8 +44,8 @@ export default function Payments() {
     setLoading(true);
     try {
       let url = `/payments?programClassId=${scope.programClassId}&termId=${scope.termId}`;
-      if (q) url += `&q=${encodeURIComponent(q)}`;
-      if (method) url += `&paymentMethod=${method}`;
+      if (q) url += `&studentId=${encodeURIComponent(q)}`;
+      if (method) url += `&method=${method}`;
       if (grp) url += `&group=${encodeURIComponent(grp)}`;
       const res = await api.get(url);
       setPayments(res.payments || []);
@@ -95,24 +103,24 @@ export default function Payments() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by student, transaction ID..."
+                placeholder="Search by student ID..."
                 onChange={(e) => handleSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               />
             </div>
             <div className="flex items-center gap-1.5 md:gap-2 overflow-x-auto">
               <Filter className="w-4 h-4 text-gray-400 shrink-0" />
-              {['', 'cash', 'bank_transfer', 'mobile_money', 'card', 'other'].map((m) => (
+              {METHOD_OPTIONS.map((m) => (
                 <button
-                  key={m}
-                  onClick={() => handleMethodFilter(m)}
+                  key={m.value}
+                  onClick={() => handleMethodFilter(m.value)}
                   className={`px-2.5 md:px-3 py-1.5 text-xs font-medium rounded-lg transition-colors shrink-0 ${
-                    methodFilter === m
+                    methodFilter === m.value
                       ? 'bg-indigo-100 text-indigo-700'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {m ? m.replace('_', ' ') : 'All'}
+                  {m.label}
                 </button>
               ))}
             </div>
@@ -139,20 +147,19 @@ export default function Payments() {
           <table className="w-full text-left">
             <thead className="text-xs text-gray-500 uppercase bg-gray-50">
               <tr>
-                <th className="px-4 md:px-6 py-3 md:py-4 rounded-l-lg">Student</th>
+                <th className="px-4 md:px-6 py-3 md:py-4 rounded-l-lg">Order ID</th>
                 <th className="px-4 md:px-6 py-3 md:py-4">Amount</th>
                 <th className="px-4 md:px-6 py-3 md:py-4 hidden sm:table-cell">Method</th>
-                <th className="px-4 md:px-6 py-3 md:py-4 hidden md:table-cell">Transaction ID</th>
-                <th className="px-4 md:px-6 py-3 md:py-4 hidden lg:table-cell">Handout Order</th>
+                <th className="px-4 md:px-6 py-3 md:py-4 hidden md:table-cell">Reference</th>
                 <th className="px-4 md:px-6 py-3 md:py-4 hidden lg:table-cell">Date</th>
-                <th className="px-4 md:px-6 py-3 md:py-4 rounded-r-lg">Receipt</th>
+                <th className="px-4 md:px-6 py-3 md:py-4 rounded-r-lg">Received By</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={7}><TableSkeleton rows={5} cols={7} /></td></tr>
+                <tr><td colSpan={6}><TableSkeleton rows={5} cols={6} /></td></tr>
               ) : payments.length === 0 ? (
-                <tr><td colSpan={7}>
+                <tr><td colSpan={6}>
                   <EmptyState
                     icon={DollarSign}
                     title="No payments recorded"
@@ -165,11 +172,10 @@ export default function Payments() {
                     <td className="px-4 md:px-6 py-3 md:py-4">
                       <div className="flex items-center min-w-0">
                         <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs md:text-sm shrink-0">
-                          {p.studentSnapshot?.fullName?.charAt(0) || '?'}
+                          {p.handoutOrderId?.charAt(0)?.toUpperCase() || '?'}
                         </div>
                         <div className="ml-3 md:ml-4 min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-gray-900 truncate">{p.studentSnapshot?.fullName || 'Unknown'}</div>
-                          <div className="text-xs text-gray-500 sm:hidden">{(p.paymentMethod || '').replace('_', ' ')}</div>
+                          <div className="text-sm font-semibold text-gray-900 font-mono truncate">{p.handoutOrderId?.slice(-8) || '—'}</div>
                         </div>
                       </div>
                     </td>
@@ -178,27 +184,15 @@ export default function Payments() {
                     </td>
                     <td className="px-4 md:px-6 py-3 md:py-4 hidden sm:table-cell">
                       <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 capitalize">
-                        {(p.paymentMethod || 'unknown').replace('_', ' ')}
+                        {(p.method || 'unknown').replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-4 md:px-6 py-3 md:py-4 text-sm font-mono text-gray-500 hidden md:table-cell">
-                      {p.transactionId || '—'}
+                      {p.reference || '—'}
                     </td>
-                    <td className="px-4 md:px-6 py-3 md:py-4 text-sm text-gray-500 font-mono hidden lg:table-cell">
-                      {p.handoutOrderId?.slice(-8) || '—'}
-                    </td>
-                    <td className="px-4 md:px-6 py-3 md:py-4 text-sm text-gray-500 hidden lg:table-cell">{formatDate(p.paymentDate || p.createdAt)}</td>
-                    <td className="px-4 md:px-6 py-3 md:py-4">
-                      {p.receiptUrl && (
-                        <a
-                          href={p.receiptUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 px-2.5 md:px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                        >
-                          <span className="hidden sm:inline">Receipt</span> <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
+                    <td className="px-4 md:px-6 py-3 md:py-4 text-sm text-gray-500 hidden lg:table-cell">{formatDate(p.paidAt)}</td>
+                    <td className="px-4 md:px-6 py-3 md:py-4 text-sm text-gray-500 font-mono">
+                      {p.receivedByUserId?.slice(-8) || '—'}
                     </td>
                   </tr>
                 ))
