@@ -1,5 +1,6 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from app.core.deps import require_role
 from app.models.user import User
 from app.models.student import Student
@@ -98,3 +99,21 @@ async def bulk_generate_invoices(
         "errors": errors[:20],
         "idempotencyKey": idempotency_key,
     }
+
+
+@router.get("/{invoice_number}/pdf")
+async def download_invoice_pdf(
+    invoice_number: str,
+    current_user: User = Depends(require_role("admin", "class_rep")),
+):
+    from app.services.invoice_pdf import generate_invoice_pdf
+
+    try:
+        pdf_bytes = await generate_invoice_pdf(invoice_number)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={invoice_number}.pdf"},
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
