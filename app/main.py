@@ -53,8 +53,11 @@ async def lifespan(app: FastAPI):
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(purge_old_audit_logs, "cron", hour=2, minute=0, day_of_week="sun")
+
+    from app.services.reconciliation_service import generate_daily_reconciliation
+    scheduler.add_job(generate_daily_reconciliation, "cron", hour=6, minute=0)
     scheduler.start()
-    logger.info("Weekly audit retention scheduler started")
+    logger.info("Weekly retention + daily reconciliation schedulers started")
 
     yield
 

@@ -17,6 +17,7 @@ import Analytics from './pages/Analytics';
 import AuditorDashboard from './pages/AuditorDashboard';
 import AdminUsers from './pages/AdminUsers';
 import RepScorecard from './pages/RepScorecard';
+import RepDashboard from './pages/RepDashboard';
 import PublicForm from './pages/PublicForm';
 import PublicStatusChecker from './pages/PublicStatusChecker';
 import NotFound from './pages/NotFound';
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/auditor" element={<AuditorDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/reps" element={<RepScorecard />} />
+            <Route path="/rep/dashboard" element={<RepDashboard />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
