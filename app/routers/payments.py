@@ -19,6 +19,7 @@ from app.services.payment_service import (
     PaymentValidationError,
 )
 from app.core.deps import require_role, require_scope
+from app.models.audit_log import AuditLog
 
 router = APIRouter(tags=["payments"])
 
@@ -145,6 +146,66 @@ async def get_balance(
         )
     except PaymentValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/payments/record")
+async def quick_record_payment(
+    invoiceNumber: str = Query(...),
+    amount: float = Query(..., gt=0),
+    reference: str = Query(..., min_length=1, max_length=100),
+    method: str = Query(default="cash"),
+    current_user: User = Depends(require_role("admin", "class_rep")),
+):
+    order = await HandoutOrder.find_one({"invoiceNumber": invoiceNumber})
+    if not order:
+        raise HTTPException(404, f"Invoice {invoiceNumber} not found")
+    if order.invoice.invoiceStatus == "paid":
+        raise HTTPException(400, f"Invoice {invoiceNumber} is already fully paid")
+
+    paid_so_far = sum(
+        p.amount for p in await Payment.find(Payment.handoutOrderId == str(order.id)).to_list()
+    )
+    remaining = order.invoice.totalAmount - paid_so_far
+    if amount > remaining + 0.01:
+        raise HTTPException(400, f"Amount {amount} exceeds remaining balance {remaining:.2f}")
+
+    _check_order_scope(order, current_user)
+
+    payment = Payment(
+        handoutOrderId=str(order.id),
+        amount=amount,
+        currency=order.invoice.currency,
+        method=method,
+        reference=reference,
+        receivedByUserId=str(current_user.id),
+    )
+    await payment.insert()
+
+    new_status = await _recompute_invoice_status(order)
+
+    await AuditLog(
+        user_id=str(current_user.id),
+        user_role=current_user.role,
+        action="RECORD_PAYMENT",
+        resource_type="Payment",
+        resource_id=str(payment.id),
+        metadata={
+            "invoice_number": invoiceNumber,
+            "amount": amount,
+            "reference": reference,
+            "method": method,
+            "student_id": order.student.idNumberSnapshot,
+        },
+        success=True,
+    ).insert()
+
+    return {
+        "paymentId": str(payment.id),
+        "invoiceNumber": invoiceNumber,
+        "amount": amount,
+        "status": "recorded",
+        "invoiceStatus": new_status,
+    }
 
 
 @router.get(
