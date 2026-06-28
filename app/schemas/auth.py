@@ -8,6 +8,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class StudentLoginRequest(BaseModel):
+    idNumber: str
+    dateOfBirth: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

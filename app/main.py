@@ -46,7 +46,31 @@ async def lifespan(app: FastAPI):
     logger.info("Starting DIT Forms API...")
     await init_db()
     logger.info("Database initialized")
+
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.services.notification_service import find_unpaid_invoices, log_notification
+
+    scheduler = AsyncIOScheduler()
+
+    async def daily_invoice_reminder():
+        invoices = await find_unpaid_invoices(days_overdue=3)
+        for inv in invoices:
+            if inv.get("student_email"):
+                log_notification(
+                    "unpaid_invoice",
+                    inv["student_email"],
+                    f"Payment Reminder: {inv['currency']} {inv['total_amount']:.2f} overdue",
+                    f"Dear {inv['student_name']}, your handout invoice is {inv['days_overdue']} days overdue.",
+                )
+        logger.info(f"Daily invoice check: {len(invoices)} unpaid, {len(invoices)} reminders logged")
+
+    scheduler.add_job(daily_invoice_reminder, "cron", hour=9, minute=0)
+    scheduler.start()
+    logger.info("Notification scheduler started")
+
     yield
+
+    scheduler.shutdown()
     logger.info("Shutting down DIT Forms API")
 
 

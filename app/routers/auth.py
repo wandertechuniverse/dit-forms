@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
+from app.models.student import Student
+from app.schemas.auth import LoginRequest, StudentLoginRequest, TokenResponse, UserResponse
 from app.core.security import verify_password, create_access_token
 from app.core.deps import get_current_user
 
@@ -35,3 +36,15 @@ async def get_me(current_user: User = Depends(get_current_user)):
         assignedClassTerms=current_user.assignedClassTerms,
         status=current_user.status,
     )
+
+
+@router.post("/student-login")
+async def student_login(request: StudentLoginRequest):
+    student = await Student.find_one(
+        Student.idNumber == request.idNumber.upper(),
+    )
+    if not student:
+        raise HTTPException(status_code=401, detail="Invalid ID number or date of birth")
+
+    token = create_access_token(data={"sub": str(student.id), "role": "student"})
+    return {"access_token": token, "token_type": "bearer", "studentId": str(student.id)}
