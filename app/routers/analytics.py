@@ -110,3 +110,121 @@ async def get_my_performance(
             "targetConsistency": 80,
         },
     }
+
+
+@router.post("/rep-recognition/check")
+async def check_rep_recognition(
+    current_user: User = Depends(require_role("admin")),
+):
+    since = datetime.utcnow() - timedelta(days=7)
+    reps = await User.find({"role": "class_rep", "status": "active"}).to_list()
+    recognized = []
+
+    for rep in reps:
+        payments = await Payment.find({
+            "receivedByUserId": str(rep.id),
+            "paidAt": {"$gte": since},
+        }).to_list()
+
+        errors = await AuditLog.find({
+            "user_id": str(rep.id),
+            "action": "RECORD_PAYMENT",
+            "success": False,
+            "timestamp": {"$gte": since},
+        }).count()
+
+        total = len(payments)
+        error_rate = (errors / (total + errors) * 100) if (total + errors) > 0 else 0
+
+        badges = []
+
+        if total >= 50 and error_rate < 2:
+            badges.append({
+                "type": "accuracy_champion",
+                "title": "Accuracy Champion",
+                "description": f"Recorded {total} payments with only {error_rate:.1f}% error rate this week",
+            })
+
+        if total >= 100:
+            badges.append({
+                "type": "volume_leader",
+                "title": "Volume Leader",
+                "description": f"Processed {total} payments — highest volume this week",
+            })
+
+        daily_counts: dict[str, int] = {}
+        for p in payments:
+            day = p.paidAt.strftime("%Y-%m-%d")
+            daily_counts[day] = daily_counts.get(day, 0) + 1
+
+        active_days = len(daily_counts)
+        avg_daily = sum(daily_counts.values()) / active_days if active_days > 0 else 0
+
+        if active_days >= 5 and avg_daily >= 10:
+            badges.append({
+                "type": "consistency_star",
+                "title": "Consistency Star",
+                "description": f"Active {active_days} days with {avg_daily:.0f} payments/day average",
+            })
+
+        if badges:
+            recognized.append({
+                "userId": str(rep.id),
+                "fullName": getattr(rep, "fullName", rep.email),
+                "badges": badges,
+            })
+
+    return {
+        "period": "last_7_days",
+        "recognized_count": len(recognized),
+        "reps": recognized,
+    }
+
+
+@router.get("/rep-retention")
+async def get_rep_retention(
+    days: int = Query(90, ge=30, le=180),
+    current_user: User = Depends(require_role("admin")),
+):
+    since = datetime.utcnow() - timedelta(days=days)
+    reps = await User.find({"role": "class_rep", "status": "active"}).to_list()
+    retention_data = []
+
+    for rep in reps:
+        first_payment = await Payment.find({
+            "receivedByUserId": str(rep.id),
+        }).sort("paidAt").limit(1).to_list()
+
+        account_age_hours = None
+        if first_payment:
+            delta = (first_payment[0].paidAt - rep.createdAt).total_seconds() / 3600
+            account_age_hours = round(delta, 1)
+
+        recent_payments = await Payment.find({
+            "receivedByUserId": str(rep.id),
+            "paidAt": {"$gte": datetime.utcnow() - timedelta(days=14)},
+        }).count()
+
+        risk_score = 0
+        if account_age_hours and account_age_hours > 72:
+            risk_score += 25
+        if recent_payments == 0:
+            risk_score += 25
+
+        retention_data.append({
+            "userId": str(rep.id),
+            "fullName": getattr(rep, "fullName", rep.email),
+            "firstPaymentLatencyHours": account_age_hours,
+            "recentPaymentsLast14d": recent_payments,
+            "retentionRiskScore": min(100, risk_score),
+            "riskLevel": "critical" if risk_score >= 70 else "warning" if risk_score >= 40 else "healthy",
+        })
+
+    retention_data.sort(key=lambda x: x["retentionRiskScore"], reverse=True)
+
+    return {
+        "periodDays": days,
+        "totalReps": len(reps),
+        "atRiskCount": sum(1 for r in retention_data if r["riskLevel"] in ("critical", "warning")),
+        "reps": retention_data,
+    }
