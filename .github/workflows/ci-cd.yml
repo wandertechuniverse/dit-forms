@@ -25,11 +25,24 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
 
-      - name: Install Dependencies
+      - name: Install Backend Dependencies
+        run: pip install -r requirements.txt pytest requests httpx
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend-react
         run: |
-          pip install -r requirements.txt pytest requests httpx
-          cd frontend-react && bun install
+          if [ ! -f bun.lock ]; then
+            bun install
+          else
+            bun install --frozen-lockfile || {
+              echo "Frozen install failed, regenerating..."
+              rm -rf node_modules
+              bun install
+            }
+          fi
 
       - name: Run E2E Tests
         env:
