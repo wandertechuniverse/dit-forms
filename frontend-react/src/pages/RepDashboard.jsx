@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Activity, Clock, AlertTriangle, TrendingUp, Target } from 'lucide-react';
+import RepTutorial from '../components/onboarding/RepTutorial';
 
 export default function RepDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
+  const [showTutorial, setShowTutorial] = useState(() => {
+    return localStorage.getItem('rep_tutorial_completed') !== 'true';
+  });
 
   useEffect(() => {
     setLoading(true);
@@ -35,6 +39,13 @@ export default function RepDashboard() {
   const consistencyProgress = m.consistencyScore;
 
   return (
+    <>
+      {showTutorial && (
+        <RepTutorial onComplete={() => {
+          localStorage.setItem('rep_tutorial_completed', 'true');
+          setShowTutorial(false);
+        }} />
+      )}
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -82,6 +93,7 @@ export default function RepDashboard() {
         <StatCard value={`${Math.round((1 - m.errorRate / 100) * 100)}%`} label="Success Rate" color="text-emerald-600" />
       </div>
     </div>
+    </>
   );
 }
 

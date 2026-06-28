@@ -1,0 +1,66 @@
+name: Backup Restore Verification
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+jobs:
+  verify-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      MONGO_ATLAS_TEST_URI: ${{ secrets.MONGO_ATLAS_TEST_URI }}
+      MONGO_ATLAS_PROD_URI: ${{ secrets.MONGO_ATLAS_PROD_URI }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MongoDB Tools
+        run: |
+          wget -q https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.9.5.deb
+          sudo dpkg -i mongodb-database-tools-*.deb
+
+      - name: Generate Fresh Backup
+        run: |
+          mongodump \
+            --uri "${{ env.MONGO_ATLAS_PROD_URI }}" \
+            --gzip \
+            --archive=/tmp/backup.gz
+          echo "Backup created: $(ls -lh /tmp/backup.gz | awk '{print $5}')"
+
+      - name: Restore to Ephemeral Test Cluster
+        run: |
+          mongorestore \
+            --uri "${{ env.MONGO_ATLAS_TEST_URI }}" \
+            --drop \
+            --gzip \
+            --archive=/tmp/backup.gz
+
+      - name: Verify Collection Integrity
+        run: |
+          python3 << 'EOF'
+          import pymongo, sys
+          client = pymongo.MongoClient("${{ env.MONGO_ATLAS_TEST_URI }}")
+          db = client.get_default_database()
+          expected = {"students", "handout_orders", "payments", "users", "audit_logs"}
+          actual = set(db.list_collection_names())
+          missing = expected - actual
+          if missing:
+              print(f"FAIL: Missing collections: {missing}")
+              sys.exit(1)
+          for coll in expected:
+              count = db[coll].count_documents({})
+              print(f"  {coll}: {count} documents")
+          print("All integrity checks passed")
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: |
+          python3 -c "
+          import pymongo
+          client = pymongo.MongoClient('${{ env.MONGO_ATLAS_TEST_URI }}')
+          client.drop_database(client.get_default_database().name)
+          print('Test DB cleaned up')
+          "
