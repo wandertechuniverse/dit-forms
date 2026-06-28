@@ -47,7 +47,18 @@ async def lifespan(app: FastAPI):
     logger.info("Starting DIT Forms API...")
     await init_db()
     logger.info("Database initialized")
+
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.services.audit_retention import purge_old_audit_logs
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(purge_old_audit_logs, "cron", hour=2, minute=0, day_of_week="sun")
+    scheduler.start()
+    logger.info("Weekly audit retention scheduler started")
+
     yield
+
+    scheduler.shutdown()
     logger.info("Shutting down DIT Forms API")
 
 

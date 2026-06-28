@@ -22,5 +22,5 @@ class AuditLog(Document):
             [("user_id", 1), ("timestamp", -1)],
             [("resource_type", 1), ("resource_id", 1)],
             [("action", 1), ("timestamp", -1)],
-            [("timestamp", -1)],
+            [("timestamp", 1), {"expireAfterSeconds": 365 * 86400}],
         ]

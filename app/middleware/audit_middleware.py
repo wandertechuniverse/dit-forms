@@ -1,6 +1,7 @@
 import json
 import asyncio
 import logging
+import sentry_sdk
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -96,6 +97,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             asyncio.create_task(_insert_log(log))
 
         except Exception as e:
+            sentry_sdk.capture_exception(e, tags={"component": "audit-middleware"})
             logger.warning(f"Audit middleware error: {e}")
 
         return response

@@ -14,6 +14,7 @@ import HandoutOrders from './pages/HandoutOrders';
 import Payments from './pages/Payments';
 import Groups from './pages/Groups';
 import Analytics from './pages/Analytics';
+import AuditorDashboard from './pages/AuditorDashboard';
 import PublicForm from './pages/PublicForm';
 import NotFound from './pages/NotFound';
 
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/payments" element={<Payments />} />
             <Route path="/groups" element={<Groups />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/auditor" element={<AuditorDashboard />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
