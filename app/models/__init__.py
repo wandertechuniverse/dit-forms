@@ -6,6 +6,7 @@ from app.models.file import SubmissionFile
 from app.models.handout import HandoutOrder
 from app.models.payment import Payment
 from app.models.alert_log import AlertLog
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "HandoutOrder",
     "Payment",
     "AlertLog",
+    "AuditLog",
 ]
