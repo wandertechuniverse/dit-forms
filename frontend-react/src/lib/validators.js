@@ -52,3 +52,9 @@ export function validateFormSchema(fields) {
   }
   return { valid: false, errors, data: null };
 }
+
+export function validateField(field) {
+  const result = fieldSchema.safeParse(field);
+  if (result.success) return { valid: true, errors: [] };
+  return { valid: false, errors: result.error.issues.map(i => i.message) };
+}
