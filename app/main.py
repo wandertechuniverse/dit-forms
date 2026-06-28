@@ -14,7 +14,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from app.config import get_settings
 from app.database import init_db
 from app.routers import auth, forms, submissions, files, handouts, payments, students, users, export, groups
-from app.routers import uploads, admin, analytics, notifications, audit, public, invoices, reps
+from app.routers import uploads, admin, analytics, notifications, audit, public, invoices, reps, feedback
 from app.middleware.audit_middleware import AuditMiddleware
 
 logging.basicConfig(
@@ -111,6 +111,7 @@ app.include_router(audit.router)
 app.include_router(public.router)
 app.include_router(invoices.router)
 app.include_router(reps.router)
+app.include_router(feedback.router)
 
 
 @app.get("/health")
