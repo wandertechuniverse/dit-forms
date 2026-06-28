@@ -45,7 +45,7 @@ async def require_scope(
     termId: str = Query(..., description="Term ID"),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role == "admin":
+    if current_user.role in ("admin", "auditor"):
         return current_user
 
     for scope in current_user.assignedClassTerms:
@@ -56,3 +56,15 @@ async def require_scope(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="You do not have access to this class/term scope",
     )
+
+
+def require_read_only():
+    """Auditors get read-only access; admins/class_reps get full access."""
+    async def checker(current_user: User = Depends(get_current_user)):
+        if current_user.role == "auditor":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Auditors have read-only access",
+            )
+        return current_user
+    return checker
