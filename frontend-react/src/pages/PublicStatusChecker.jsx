@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, CheckCircle, AlertTriangle, Download, Loader2 } from 'lucide-react';
+import FeedbackWidget from '../components/FeedbackWidget';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -133,6 +134,9 @@ export default function PublicStatusChecker() {
           </div>
         )}
       </div>
+      {status?.found && (
+        <FeedbackWidget source="status_checker" context={{ term: status.term }} />
+      )}
     </div>
   );
 }

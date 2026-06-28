@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Activity, Clock, AlertTriangle, TrendingUp, Target } from 'lucide-react';
 import RepTutorial from '../components/onboarding/RepTutorial';
+import FeedbackWidget from '../components/FeedbackWidget';
 
 export default function RepDashboard() {
   const [data, setData] = useState(null);
@@ -93,6 +94,7 @@ export default function RepDashboard() {
         <StatCard value={`${Math.round((1 - m.errorRate / 100) * 100)}%`} label="Success Rate" color="text-emerald-600" />
       </div>
     </div>
+    <FeedbackWidget source="rep_dashboard" />
     </>
   );
 }
