@@ -16,6 +16,7 @@ import Groups from './pages/Groups';
 import Analytics from './pages/Analytics';
 import AuditorDashboard from './pages/AuditorDashboard';
 import PublicForm from './pages/PublicForm';
+import PublicStatusChecker from './pages/PublicStatusChecker';
 import NotFound from './pages/NotFound';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/form/:id" element={<PublicForm />} />
+          <Route path="/check-status" element={<PublicStatusChecker />} />
 
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
