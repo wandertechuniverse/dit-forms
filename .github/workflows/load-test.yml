@@ -1,0 +1,25 @@
+name: SSE Load Test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1'
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE_URL: ${{ secrets.TEST_API_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run k6 Load Test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: load-tests/sse-load-test.js
+
+      - name: Print Results
+        if: always()
+        run: echo "Load test completed. Check k6 summary above for threshold results."
